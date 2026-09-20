@@ -1,0 +1,104 @@
+# ============================================================
+# DevJobs 2.0 — .gitignore
+# ============================================================
+
+# ----------------------
+# Dependências
+# ----------------------
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ----------------------
+# Next.js / Build
+# ----------------------
+/.next/
+/out/
+/build
+/.turbo
+
+# ----------------------
+# TypeScript
+# ----------------------
+*.tsbuildinfo
+next-env.d.ts
+
+# ----------------------
+# SECRETS E VARIÁVEIS DE AMBIENTE
+# NUNCA versionar arquivos de ambiente com valores reais
+# ----------------------
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+.env.staging.local
+
+# PERMITIDO versionar (apenas template sem valores reais)
+# !.env.example
+
+# ----------------------
+# Certificados e chaves privadas
+# ----------------------
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*.ppk
+
+# ----------------------
+# Testes
+# ----------------------
+/coverage
+/playwright-report
+/test-results
+/blob-report
+
+# ----------------------
+# Deploy / CI
+# ----------------------
+.vercel
+
+# ----------------------
+# SO / IDE
+# ----------------------
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# ----------------------
+# Debug
+# ----------------------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# ----------------------
+# Scripts e arquivos temporários de setup e CLI
+# ----------------------
+scaffold.bat
+/supabase/.temp/
+
