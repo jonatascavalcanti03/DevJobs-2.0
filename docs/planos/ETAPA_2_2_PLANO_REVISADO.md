@@ -289,3 +289,20 @@ Riscos e dependências:
 Nesta revisão foi criado somente este documento de planejamento. O PDF e o plano original em `docs/referencias/` foram preservados. Não foram alterados código, testes, migrations, banco, RLS, APIs, UI, dependências, configurações ou README. Não houve commit ou push.
 
 **ETAPA 2.2 — PLANO ATUALIZADO, AGUARDANDO APROVAÇÃO HUMANA**
+
+## 13. Registro posterior de decisões de planejamento visual
+
+**Data:** 2026-09-28  
+**Natureza:** registro de decisão humana para planejamento; não autoriza implementação, alteração de código, integração, migrations, RLS, schemas, testes, dependências ou configuração.
+
+| ID | Assunto | Estado | Registro operacional |
+|---|---|---|---|
+| DPV-01 | Direção visual do produto | **APROVADA COMO REFERÊNCIA DE PLANEJAMENTO** | Signal Indigo é a direção para o planejamento visual imersivo: azul profundo/índigo, destaques azul elétrico e violeta, luzes quentes e cenários digitais. Não aprova definitivamente telas, tokens, imagens, animações, componentes ou implementação. |
+| DPV-02 | Prioridade do frontend | **APROVADA SOMENTE PARA PLANEJAMENTO** | Fundação visual e navegação responsiva são a prioridade de planejamento. Esta decisão não autoriza criação de páginas, componentes, CSS, rotas, contratos de API, Server Actions, integração de formulários ou funcionalidades. |
+| DPA-01 | Clientes Supabase | **AUDITORIA OBRIGATÓRIA, DECISÃO PENDENTE** | `lib/supabase/` e `infrastructure/supabase/` devem ser auditados antes de propor uma estrutura canônica. Não apagar, migrar, duplicar ou alterar arquivos até aprovação humana da recomendação. |
+| DPV-03 | Composição híbrida do hero | **APROVADA SOMENTE PARA PLANEJAMENTO** | `AST-01` é cenário-base completo e independente. `AST-07` (personagem) e `AST-13` (camada atmosférica) são overlays opcionais, usados somente se acrescentarem valor perceptível. A decisão não aprova arquivos gerados nem implementação. |
+
+Limites preservados:
+
+- O contrato de cadastro de empresa do **RF02** continua pendente de aprovação humana; nenhuma tela, schema, teste ou integração de cadastro de empresa está autorizada.
+- O status geral deste plano continua **Aguardando aprovação humana**. A prioridade visual registrada acima não equivale à aprovação da implementação da ETAPA 2.2.
