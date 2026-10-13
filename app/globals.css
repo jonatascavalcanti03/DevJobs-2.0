@@ -1,5 +1,5 @@
 /* ==========================================================================
-   DevJobs 2.0 — Signal Indigo Design System & Global Styles
+   TechLink — Signal Indigo Design System & Global Styles
    ========================================================================== */
 
 :root {
@@ -3152,5 +3152,252 @@ body {
 
 .text-warning {
   color: var(--color-status-warning);
+}
+
+/* ==========================================================================
+   Product preview pages
+   ========================================================================== */
+
+.product-preview {
+  min-height: 80vh;
+  padding: calc(var(--header-height) + var(--space-16)) 0 var(--space-20);
+  background:
+    radial-gradient(circle at 78% 8%, rgba(56, 189, 248, 0.12), transparent 26rem),
+    radial-gradient(circle at 18% 28%, rgba(139, 92, 246, 0.14), transparent 28rem);
+}
+
+.product-preview-hero {
+  text-align: center;
+  max-width: 860px;
+}
+
+.product-preview-title {
+  font-size: clamp(2.25rem, 5vw, 4.25rem);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  margin-bottom: var(--space-5);
+}
+
+.product-preview-description {
+  color: var(--color-text-secondary);
+  font-size: clamp(1.0625rem, 2vw, 1.25rem);
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.product-preview-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+}
+
+.product-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
+  margin-top: var(--space-16);
+}
+
+.product-preview-card {
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface);
+  background: rgba(13, 27, 62, 0.72);
+  box-shadow: var(--shadow-card);
+}
+
+.product-preview-index {
+  color: var(--color-electric-blue);
+  font: 700 0.8125rem var(--font-mono);
+  margin-bottom: auto;
+}
+
+.product-preview-card h2 {
+  font-size: 1.25rem;
+  margin: var(--space-6) 0 var(--space-2);
+}
+
+.product-preview-card p {
+  color: var(--color-text-secondary);
+}
+
+.product-preview-status {
+  margin-top: var(--space-5);
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  color: var(--color-electric-blue);
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 800px) {
+  .product-preview-grid {
+    grid-template-columns: 1fr;
+    margin-top: var(--space-10);
+  }
+
+  .product-preview-card {
+    min-height: 210px;
+  }
+}
+
+/* ==========================================================================
+   Fase 4: Feedback Visual & Filtros de Vagas (RF20 / RF21)
+   ========================================================================== */
+
+.alert-success-box {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #6EE7B7;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.candidate-profile-form .form-group {
+  margin-bottom: var(--space-4);
+}
+
+.candidate-profile-form label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.vagas-filters-container {
+  background: rgba(13, 27, 62, 0.5);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface);
+  padding: var(--space-6);
+  margin-bottom: var(--space-8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.vagas-search-bar {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.vagas-search-input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.vagas-search-icon {
+  position: absolute;
+  left: var(--space-4);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.vagas-search-input {
+  width: 100%;
+  height: 48px;
+  padding-left: calc(var(--space-4) + 24px);
+  padding-right: var(--space-4);
+  background: rgba(7, 18, 46, 0.6);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+  transition: all var(--transition-fast);
+}
+
+.vagas-search-input:focus {
+  outline: none;
+  border-color: var(--color-electric-blue);
+  box-shadow: 0 0 0 3px var(--color-electric-blue-glow);
+}
+
+.vagas-filters-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .vagas-filters-row {
+    grid-template-columns: repeat(3, 1fr) auto;
+    align-items: center;
+  }
+}
+
+.vagas-filter-select {
+  height: 42px;
+  background: rgba(7, 18, 46, 0.6);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-control);
+  color: var(--color-text-primary);
+  padding: 0 var(--space-3);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.vagas-filter-select:focus {
+  outline: none;
+  border-color: var(--color-electric-blue);
+}
+
+.vagas-filter-select option {
+  background: var(--color-bg-deep);
+  color: var(--color-text-primary);
+}
+
+.vagas-filter-reset-btn {
+  height: 42px;
+  padding: 0 var(--space-4);
+  background: transparent;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  transition: all var(--transition-fast);
+}
+
+.vagas-filter-reset-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-medium);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.vagas-results-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.vagas-results-count strong {
+  color: var(--color-electric-blue);
 }
 

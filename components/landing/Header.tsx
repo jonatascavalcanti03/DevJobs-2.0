@@ -3,7 +3,14 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 
-export function Header() {
+export interface HeaderProps {
+  user?: {
+    email?: string | null;
+    role?: "CANDIDATE" | "COMPANY" | "ADMIN" | string | null;
+  } | null;
+}
+
+export function Header({ user }: HeaderProps = {}) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -51,39 +58,56 @@ export function Header() {
     <header className={`site-header ${isScrolled ? "scrolled" : ""}`}>
       <div className="container header-container">
         {/* Logo */}
-        <Link href="/" className="header-logo" aria-label="DevJobs 2.0 Início">
+        <Link href="/" className="header-logo" aria-label="TechLink Início">
           <div className="header-logo-icon" aria-hidden="true">
-            DJ
+            TL
           </div>
           <span>
-            DevJobs<span className="header-logo-badge">2.0</span>
+            TechLink
           </span>
         </Link>
 
         {/* Navegação Desktop */}
         <nav className="header-nav" aria-label="Navegação principal">
-          <Link href="#beneficios" className="header-nav-link">
-            Benefícios
+          <Link href="/candidatos" className="header-nav-link">
+            Candidatos
           </Link>
-          <Link href="#como-funciona" className="header-nav-link">
-            Como funciona
+          <Link href="/empresas" className="header-nav-link">
+            Empresas
           </Link>
-          <Link href="#vagas" className="header-nav-link">
-            Vagas em destaque
+          <Link href="/recursos" className="header-nav-link">
+            Recursos
           </Link>
-          <Link href="#comunidade" className="header-nav-link">
-            Comunidade
+          <Link href="/sobre" className="header-nav-link">
+            Sobre
           </Link>
         </nav>
 
         {/* Ações Desktop */}
         <div className="header-actions">
-          <Link href="#vagas" className="btn btn-primary" style={{ padding: "0.55rem 1.15rem", fontSize: "0.875rem" }}>
+          <Link href="/vagas" className="btn btn-primary" style={{ padding: "0.55rem 1.15rem", fontSize: "0.875rem" }}>
             Explorar vagas
           </Link>
-          <Link href="/login" className="btn btn-ghost" style={{ padding: "0.55rem 1rem", fontSize: "0.875rem" }}>
-            Entrar
-          </Link>
+
+          {user ? (
+            <Link
+              href="/dashboard"
+              className="btn btn-secondary"
+              style={{ padding: "0.55rem 1rem", fontSize: "0.875rem" }}
+              id="header-btn-dashboard"
+            >
+              Meu Painel
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              className="btn btn-ghost"
+              style={{ padding: "0.55rem 1rem", fontSize: "0.875rem" }}
+              id="header-btn-login"
+            >
+              Entrar
+            </Link>
+          )}
 
           {/* Botão Mobile */}
           <button
@@ -142,9 +166,9 @@ export function Header() {
         <div className="mobile-drawer-header">
           <div className="header-logo">
             <div className="header-logo-icon" aria-hidden="true">
-              DJ
+              TL
             </div>
-            <span>DevJobs 2.0</span>
+            <span>TechLink</span>
           </div>
           <button
             type="button"
@@ -171,27 +195,33 @@ export function Header() {
         </div>
 
         <nav className="mobile-drawer-nav" aria-label="Links do menu mobile">
-          <Link href="#beneficios" className="mobile-nav-link" onClick={closeMobileMenu}>
-            Benefícios
+          <Link href="/candidatos" className="mobile-nav-link" onClick={closeMobileMenu}>
+            Candidatos
           </Link>
-          <Link href="#como-funciona" className="mobile-nav-link" onClick={closeMobileMenu}>
-            Como funciona
+          <Link href="/empresas" className="mobile-nav-link" onClick={closeMobileMenu}>
+            Empresas
           </Link>
-          <Link href="#vagas" className="mobile-nav-link" onClick={closeMobileMenu}>
-            Vagas em destaque
+          <Link href="/recursos" className="mobile-nav-link" onClick={closeMobileMenu}>
+            Recursos
           </Link>
-          <Link href="#comunidade" className="mobile-nav-link" onClick={closeMobileMenu}>
-            Comunidade
+          <Link href="/sobre" className="mobile-nav-link" onClick={closeMobileMenu}>
+            Sobre
           </Link>
         </nav>
 
         <div className="mobile-drawer-actions">
-          <Link href="#vagas" className="btn btn-primary" onClick={closeMobileMenu}>
+          <Link href="/vagas" className="btn btn-primary" onClick={closeMobileMenu}>
             Explorar vagas
           </Link>
-          <Link href="/login" className="btn btn-secondary" onClick={closeMobileMenu}>
-            Entrar na conta
-          </Link>
+          {user ? (
+            <Link href="/dashboard" className="btn btn-secondary" onClick={closeMobileMenu}>
+              Meu Painel
+            </Link>
+          ) : (
+            <Link href="/login" className="btn btn-secondary" onClick={closeMobileMenu}>
+              Entrar na conta
+            </Link>
+          )}
         </div>
       </div>
     </header>

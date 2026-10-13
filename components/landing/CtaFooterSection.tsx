@@ -41,9 +41,9 @@ export function CtaFooterSection() {
             <div className="footer-brand">
               <div className="header-logo">
                 <div className="header-logo-icon" aria-hidden="true">
-                  DJ
+                  TL
                 </div>
-                <span>DevJobs 2.0</span>
+                <span>TechLink</span>
               </div>
               <p className="footer-desc">
                 Plataforma de recrutamento em tecnologia desenhada para conectar competências
@@ -127,7 +127,7 @@ export function CtaFooterSection() {
 
           <div className="footer-bottom">
             <span>
-              &copy; {currentYear} DevJobs 2.0. Todos os direitos reservados.
+              &copy; {currentYear} TechLink. Todos os direitos reservados.
             </span>
             <a
               href="#main-content"

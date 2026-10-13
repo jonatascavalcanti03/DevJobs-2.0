@@ -19,11 +19,11 @@ describe("Landing Page — Componentes Visuais e Acessibilidade", () => {
 
   it("renderiza o Header com logo, navegação e botões de ação", () => {
     render(<Header />);
-    expect(screen.getByLabelText("DevJobs 2.0 Início")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Benefícios" }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole("link", { name: "Como funciona" }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole("link", { name: "Vagas em destaque" }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole("link", { name: "Comunidade" }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByLabelText("TechLink Início")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Candidatos" }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("link", { name: "Empresas" }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("link", { name: "Recursos" }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("link", { name: "Sobre" }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("link", { name: "Entrar" })).toBeInTheDocument();
   });
 

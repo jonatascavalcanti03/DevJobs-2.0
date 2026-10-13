@@ -3,7 +3,7 @@ import "./globals.css";
 import { SkipLink } from "@/components/landing/SkipLink";
 
 export const metadata: Metadata = {
-  title: "DevJobs 2.0 — Plataforma Inteligente de Recrutamento Tech",
+  title: "TechLink — Plataforma Inteligente de Recrutamento Tech",
   description:
     "Conectando talentos da tecnologia às oportunidades certas. Matching orientado por competências reais, processos seletivos transparentes e foco exclusivo no ecossistema tech.",
   keywords: [

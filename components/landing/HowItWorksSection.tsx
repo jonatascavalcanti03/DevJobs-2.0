@@ -31,7 +31,7 @@ export function HowItWorksSection() {
         <div className="how-it-works-header">
           <span className="section-tag">Fluxo Transparente</span>
           <h2 id="how-it-works-title" className="section-title">
-            Como funciona o DevJobs 2.0
+            Como funciona o TechLink
           </h2>
           <p className="section-subtitle" style={{ margin: "0 auto" }}>
             Uma jornada desenhada em quatro etapas para simplificar sua aproximação com os

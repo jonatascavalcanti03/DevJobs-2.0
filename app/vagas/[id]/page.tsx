@@ -95,7 +95,7 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
 
   return (
     <>
-      <Header />
+      <Header user={user ? { email: user.email, role: userRole } : null} />
       <main className="job-details-page" id="main-content">
         <div className="container">
           <div className="job-details-breadcrumb">

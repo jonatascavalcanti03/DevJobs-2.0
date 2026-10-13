@@ -44,7 +44,12 @@ function LoginForm() {
         </div>
 
         <div className="form-group">
-          <label htmlFor="password">Senha</label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <label htmlFor="password">Senha</label>
+            <Link href="/forgot-password" className="auth-link" style={{ fontSize: "0.8125rem" }}>
+              Esqueceu a senha?
+            </Link>
+          </div>
           <input 
             type="password" 
             id="password" 
@@ -88,11 +93,11 @@ export default function LoginPage() {
       <div className="auth-card">
         <div className="auth-header">
           <Link href="/" className="auth-logo" aria-label="Voltar para a página inicial">
-            <div className="header-logo-icon" aria-hidden="true">DJ</div>
-            <span>DevJobs 2.0</span>
+            <div className="header-logo-icon" aria-hidden="true">TL</div>
+            <span>TechLink</span>
           </Link>
           <h1 className="auth-title">Entrar na sua conta</h1>
-          <p className="auth-subtitle">Acesse o DevJobs para gerenciar sua carreira ou suas vagas.</p>
+          <p className="auth-subtitle">Acesse o TechLink para gerenciar sua carreira ou suas vagas.</p>
         </div>
 
         <Suspense fallback={<div>Carregando formulário...</div>}>

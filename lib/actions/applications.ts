@@ -232,12 +232,12 @@ export async function applyToJob(jobId: string): Promise<ApplyToJobResult> {
       success: true,
       applicationId: newApplication.id,
     };
-  } catch (err: unknown) {
+  } catch {
     return {
       success: false,
       error: {
         code: "INTERNAL_ERROR",
-        message: err instanceof Error ? err.message : "Erro inesperado ao processar candidatura.",
+        message: "Não foi possível processar sua candidatura. Tente novamente.",
       },
     };
   }

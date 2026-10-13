@@ -9,13 +9,17 @@ export default async function DashboardIndex() {
     redirect("/login");
   }
 
-  const { data: userData } = await supabase
+  const { data: userData, error: userError } = await supabase
     .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
 
-  const role = userData?.role || user.user_metadata?.role || "CANDIDATE";
+  if (userError || !userData) {
+    redirect("/login?error=account");
+  }
+
+  const role = userData.role;
 
   if (role === "COMPANY") {
     redirect("/dashboard/empresa");

@@ -16,21 +16,25 @@ export default async function DashboardLayout({
   }
 
   // Obter o role do banco de dados (public.users)
-  const { data: userData } = await supabase
+  const { data: userData, error: userError } = await supabase
     .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
 
-  const role = userData?.role || user.user_metadata?.role || "CANDIDATE";
+  if (userError || !userData) {
+    redirect("/login?error=account");
+  }
+
+  const role = userData.role;
 
   return (
     <div className="dashboard-layout">
       <header className="dashboard-header">
         <div className="container dashboard-header-container">
-          <Link href="/" className="header-logo" aria-label="DevJobs 2.0 Início">
-            <div className="header-logo-icon" aria-hidden="true">DJ</div>
-            <span>DevJobs 2.0</span>
+          <Link href="/" className="header-logo" aria-label="TechLink Início">
+            <div className="header-logo-icon" aria-hidden="true">TL</div>
+            <span>TechLink</span>
           </Link>
           
           <div className="dashboard-user-info">

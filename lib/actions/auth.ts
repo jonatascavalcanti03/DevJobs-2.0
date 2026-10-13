@@ -1,76 +1,143 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { LoginSchema } from "@/lib/validations/auth.schema";
+import { CandidateRegisterSchema } from "@/lib/validations/candidate/register.schema";
+import { CompanyRegisterSchema } from "@/lib/validations/company/register.schema";
+import { RequestPasswordResetSchema, ResetPasswordSchema } from "@/lib/validations/auth/forgot-password.schema";
+
+function getInternalRedirect(value: FormDataEntryValue | null): string {
+  if (typeof value !== "string") return "/dashboard";
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
+}
 
 export async function login(formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const redirectTo = (formData.get("redirectTo") as string) || "/dashboard";
-
-  const supabase = await createClient();
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
+  const parsed = LoginSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
   });
 
+  if (!parsed.success) {
+    return { error: "Informe e-mail e senha válidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+
   if (error) {
-    return { error: error.message };
+    return { error: "Não foi possível entrar com estas credenciais." };
   }
 
   revalidatePath("/", "layout");
-  redirect(redirectTo);
+  redirect(getInternalRedirect(formData.get("redirectTo")));
 }
 
 export async function register(formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const role = formData.get("role") as string; // 'CANDIDATE' or 'COMPANY'
+  const parsed = CandidateRegisterSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+  });
 
-  if (!email || !password || !role) {
-    return { error: "Todos os campos são obrigatórios." };
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados de cadastro inválidos." };
   }
 
-  if (role !== "CANDIDATE" && role !== "COMPANY") {
-    return { error: "Tipo de conta inválido." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp(parsed.data);
+
+  if (error || !data.user) {
+    return { error: "Não foi possível criar sua conta. Tente novamente." };
+  }
+
+  revalidatePath("/", "layout");
+  redirect(data.session ? "/dashboard" : "/login?registered=1");
+}
+
+export async function registerCompany(formData: FormData) {
+  const parsed = CompanyRegisterSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+    cnpj: formData.get("cnpj"),
+    company_name: formData.get("company_name"),
+    trading_name: formData.get("trading_name"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados de cadastro de empresa inválidos." };
   }
 
   const supabase = await createClient();
 
-  // Criação do usuário na auth
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        role, // Armazena na metadata
-      },
-    },
-  });
+  // 1. Verificar se CNPJ já existe
+  const { data: existingCompany } = await supabase
+    .from("company_profiles")
+    .select("id")
+    .eq("cnpj", parsed.data.cnpj)
+    .maybeSingle();
 
-  if (authError) {
-    return { error: authError.message };
+  if (existingCompany) {
+    return { error: "Este CNPJ já está cadastrado no sistema." };
   }
 
-  if (authData.user) {
-    // Insere na tabela public.users
-    const { error: dbError } = await supabase.from("users").insert({
-      id: authData.user.id,
-      email: authData.user.email,
-      role: role,
-    });
+  // 2. Criar credenciais de acesso no Supabase Auth
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: parsed.data.email,
+    password: parsed.data.password,
+  });
 
-    if (dbError) {
-      // Se der erro ao inserir na public.users, idealmente deveria reverter a auth,
-      // mas por enquanto apenas retornamos o erro.
-      console.error("Erro ao inserir na tabela users:", dbError);
+  if (authError || !authData.user) {
+    return { error: authError?.message || "Não foi possível criar as credenciais de acesso." };
+  }
+
+  const userId = authData.user.id;
+
+  try {
+    // 3. Garantir consistência atômica no backend (Service Role isolada)
+    const admin = createAdminClient();
+
+    // Atribuir papel COMPANY em public.users
+    await admin
+      .from("users")
+      .update({ role: "COMPANY" })
+      .eq("id", userId);
+
+    // Inserir registro institucional em company_profiles
+    const { data: companyProfile, error: profileError } = await admin
+      .from("company_profiles")
+      .insert({
+        cnpj: parsed.data.cnpj,
+        company_name: parsed.data.company_name,
+        trading_name: parsed.data.trading_name,
+        verification_status: "PENDING",
+      })
+      .select("id")
+      .single();
+
+    if (profileError || !companyProfile) {
+      return { error: "Erro ao registrar perfil institucional da empresa." };
     }
+
+    // Vincular usuário como OWNER da empresa
+    const { error: memberError } = await admin
+      .from("company_members")
+      .insert({
+        company_id: companyProfile.id,
+        user_id: userId,
+        role: "OWNER",
+      });
+
+    if (memberError) {
+      return { error: "Erro ao vincular administrador da empresa." };
+    }
+  } catch {
+    return { error: "Falha na inicialização dos dados da empresa." };
   }
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(authData.session ? "/dashboard/empresa" : "/login?registered=1");
 }
 
 export async function logout() {
@@ -79,3 +146,53 @@ export async function logout() {
   revalidatePath("/", "layout");
   redirect("/");
 }
+
+/**
+ * RF04: Solicitação de Redefinição de Senha
+ */
+export async function requestPasswordReset(formData: FormData) {
+  const parsed = RequestPasswordResetSchema.safeParse({
+    email: formData.get("email"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "E-mail inválido." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/reset-password`,
+  });
+
+  if (error) {
+    return { error: "Não foi possível enviar o e-mail de recuperação. Tente novamente mais tarde." };
+  }
+
+  return { success: true };
+}
+
+/**
+ * RF04: Redefinição de Senha com Nova Credencial
+ */
+export async function resetPassword(formData: FormData) {
+  const parsed = ResetPasswordSchema.safeParse({
+    password: formData.get("password"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Senha inválida." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({
+    password: parsed.data.password,
+  });
+
+  if (error) {
+    return { error: "Não foi possível redefinir sua senha. O link pode ter expirado." };
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/login?reset=1");
+}
+
