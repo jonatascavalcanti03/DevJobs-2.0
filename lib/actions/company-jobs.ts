@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { JobCreateSchema, JobStatusUpdateSchema } from "@/lib/validations/company/job.schema";
 import { CompanyProfileUpdateSchema } from "@/lib/validations/company/profile.schema";
+import { AdvanceApplicationStageSchema } from "@/lib/validations/company/pipeline.schema";
 
 /**
  * Auxiliar para obter a empresa associada ao usuário autenticado e verificar permissão de gestão.
@@ -175,7 +176,8 @@ export async function updateCompanyProfile(formData: FormData) {
 }
 
 /**
- * RF33: Transição de Candidatura no Pipeline Seletivo com Histórico.
+ * RF33: Transição de Candidatura no Pipeline Seletivo com Histórico Imutável.
+ * Execução 100% atômica via RPC PostgreSQL (Migration 00010).
  */
 export async function advanceApplicationStage(formData: FormData) {
   const supabase = await createClient();
@@ -185,66 +187,53 @@ export async function advanceApplicationStage(formData: FormData) {
     return { error: authCheck.error || "Acesso negado." };
   }
 
-  const applicationId = formData.get("applicationId") as string;
-  const newStatus = formData.get("newStatus") as string;
-  const notes = (formData.get("notes") as string) || null;
-
-  const validStatuses = ["SUBMITTED", "SCREENING", "INTERVIEW", "ADVANCING", "HIRED", "REJECTED", "WITHDRAWN", "CLOSED"];
-  if (!applicationId || !validStatuses.includes(newStatus)) {
-    return { error: "Status de candidatura inválido." };
-  }
-
-  // Buscar candidatura e confirmar posse pela empresa da vaga
-  const { data: application } = await supabase
-    .from("applications")
-    .select(`
-      id,
-      status,
-      job_id,
-      jobs!inner (
-        company_id
-      )
-    `)
-    .eq("id", applicationId)
-    .eq("jobs.company_id", authCheck.companyId)
-    .maybeSingle();
-
-  if (!application) {
-    return { error: "Candidatura não encontrada ou não pertence a esta empresa." };
-  }
-
-  type ApplicationStatus =
-    | "SUBMITTED"
-    | "SCREENING"
-    | "INTERVIEW"
-    | "ADVANCING"
-    | "HIRED"
-    | "REJECTED"
-    | "WITHDRAWN"
-    | "CLOSED";
-
-  const previousStatus = application.status;
-  const typedNewStatus = newStatus as ApplicationStatus;
-  const typedPreviousStatus = previousStatus as ApplicationStatus;
-
-  // Atualizar status da candidatura
-  const { error: updateAppError } = await supabase
-    .from("applications")
-    .update({ status: typedNewStatus })
-    .eq("id", applicationId);
-
-  if (updateAppError) {
-    return { error: "Não foi possível atualizar o status da candidatura." };
-  }
-
-  // Gravar histórico de transição imutável (RN06)
-  await supabase.from("application_stage_history").insert({
-    application_id: applicationId,
-    previous_status: typedPreviousStatus,
-    new_status: typedNewStatus,
-    changed_by: authCheck.user.id,
-    notes: notes,
+  const parsed = AdvanceApplicationStageSchema.safeParse({
+    applicationId: formData.get("applicationId"),
+    newStatus: formData.get("newStatus"),
+    notes: formData.get("notes"),
   });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || "Parâmetros inválidos para transição de etapa." };
+  }
+
+  // Chamada atômica à função PostgreSQL (SECURITY DEFINER com verificação de auth.uid() e papéis)
+  const { data: rpcResult, error: rpcError } = await supabase.rpc(
+    "advance_application_stage",
+    {
+      _application_id: parsed.data.applicationId,
+      _new_status: parsed.data.newStatus,
+      _notes: parsed.data.notes,
+    }
+  );
+
+  if (rpcError) {
+    console.error("[RF33] Falha de comunicação ou infraestrutura na RPC advance_application_stage:", {
+      code: rpcError.code,
+      message: rpcError.message,
+    });
+    return { error: "Não foi possível atualizar a etapa da candidatura no momento." };
+  }
+
+  const response = rpcResult as {
+    success?: boolean;
+    error_code?: string;
+    error_message?: string;
+  } | null;
+
+  if (!response || !response.success) {
+    if (response?.error_code === "INTERNAL_ERROR") {
+      console.error("[RF33] Transação revertida com erro interno no banco de dados.", {
+        applicationId: parsed.data.applicationId,
+        newStatus: parsed.data.newStatus,
+      });
+      return { error: "Não foi possível atualizar a etapa da candidatura no momento." };
+    }
+
+    return {
+      error: response?.error_message || "Não foi possível atualizar a etapa da candidatura.",
+    };
+  }
 
   revalidatePath("/dashboard/empresa");
   revalidatePath("/dashboard/candidato");
