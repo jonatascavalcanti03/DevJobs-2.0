@@ -115,25 +115,27 @@ describe.skipIf(!isDbConfigured)("RF33: Integração Real com Banco PostgreSQL",
       // SET LOCAL afeta apenas esta transação.
       let pgError: { code?: string; message?: string } | null = null;
 
+      const client = await pool.connect();
       try {
-        await pool.query("BEGIN");
-        await pool.query(`SET LOCAL app.current_user_id = '${RECRUITER_ID}'`);
-        await pool.query(`SET LOCAL app.current_role = 'authenticated'`);
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.current_user_id', $1, true)", [RECRUITER_ID]);
+        await client.query("SELECT set_config('app.current_role', 'authenticated', true)");
         // Tenta SET ROLE authenticated para acionar restrições de role SQL
-        await pool.query("SET LOCAL ROLE authenticated");
+        await client.query("SET LOCAL ROLE authenticated");
 
-        await pool.query(
+        await client.query(
           `INSERT INTO public.application_stage_history
              (application_id, previous_status, new_status, changed_by)
            VALUES ($1, 'SUBMITTED', 'SCREENING', $2)`,
           [APPLICATION_ID, RECRUITER_ID]
         );
-        await pool.query("COMMIT");
+        await client.query("COMMIT");
       } catch (err) {
-        await pool.query("ROLLBACK");
+        await client.query("ROLLBACK");
         pgError = err as { code?: string; message?: string };
       } finally {
-        await pool.query("RESET ROLE");
+        await client.query("RESET ROLE").catch(() => {});
+        client.release();
       }
 
       // Deve falhar com permission denied (42501) — REVOKE de INSERT
@@ -162,35 +164,43 @@ describe.skipIf(!isDbConfigured)("RF33: Integração Real com Banco PostgreSQL",
       let deleteError: { code?: string } | null = null;
 
       // Tentativa de UPDATE
+      const clientUpdate = await pool.connect();
       try {
-        await pool.query("BEGIN");
-        await pool.query("SET LOCAL ROLE authenticated");
-        await pool.query(
+        await clientUpdate.query("BEGIN");
+        await clientUpdate.query("SELECT set_config('app.current_user_id', $1, true)", [RECRUITER_ID]);
+        await clientUpdate.query("SELECT set_config('app.current_role', 'authenticated', true)");
+        await clientUpdate.query("SET LOCAL ROLE authenticated");
+        await clientUpdate.query(
           `UPDATE public.application_stage_history SET notes = 'TAMPERED' WHERE application_id = $1`,
           [APPLICATION_ID]
         );
-        await pool.query("COMMIT");
+        await clientUpdate.query("COMMIT");
       } catch (err) {
-        await pool.query("ROLLBACK");
+        await clientUpdate.query("ROLLBACK");
         updateError = err as { code?: string };
       } finally {
-        await pool.query("RESET ROLE");
+        await clientUpdate.query("RESET ROLE").catch(() => {});
+        clientUpdate.release();
       }
 
       // Tentativa de DELETE
+      const clientDelete = await pool.connect();
       try {
-        await pool.query("BEGIN");
-        await pool.query("SET LOCAL ROLE authenticated");
-        await pool.query(
+        await clientDelete.query("BEGIN");
+        await clientDelete.query("SELECT set_config('app.current_user_id', $1, true)", [RECRUITER_ID]);
+        await clientDelete.query("SELECT set_config('app.current_role', 'authenticated', true)");
+        await clientDelete.query("SET LOCAL ROLE authenticated");
+        await clientDelete.query(
           `DELETE FROM public.application_stage_history WHERE application_id = $1`,
           [APPLICATION_ID]
         );
-        await pool.query("COMMIT");
+        await clientDelete.query("COMMIT");
       } catch (err) {
-        await pool.query("ROLLBACK");
+        await clientDelete.query("ROLLBACK");
         deleteError = err as { code?: string };
       } finally {
-        await pool.query("RESET ROLE");
+        await clientDelete.query("RESET ROLE").catch(() => {});
+        clientDelete.release();
       }
 
       // Ambas as operações devem falhar com 42501 (permission denied)
@@ -221,8 +231,8 @@ describe.skipIf(!isDbConfigured)("RF33: Integração Real com Banco PostgreSQL",
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-        await client.query(`SET LOCAL app.current_user_id = '${RECRUITER_ID}'`);
-        await client.query(`SET LOCAL app.current_role = 'authenticated'`);
+        await client.query("SELECT set_config('app.current_user_id', $1, true)", [RECRUITER_ID]);
+        await client.query("SELECT set_config('app.current_role', 'authenticated', true)");
         const res = await client.query<{ result: { success: boolean; new_status: string; previous_status: string } }>(
           `SELECT advance_application_stage($1::UUID, $2::TEXT, $3::TEXT) AS result`,
           [APPLICATION_ID, "SCREENING", "Triagem via CI"]
@@ -282,8 +292,8 @@ describe.skipIf(!isDbConfigured)("RF33: Integração Real com Banco PostgreSQL",
       let rpcResult: RpcResult | null = null;
       try {
         await client.query("BEGIN");
-        await client.query(`SET LOCAL app.current_user_id = '${RECRUITER_ID}'`);
-        await client.query(`SET LOCAL app.current_role = 'authenticated'`);
+        await client.query("SELECT set_config('app.current_user_id', $1, true)", [RECRUITER_ID]);
+        await client.query("SELECT set_config('app.current_role', 'authenticated', true)");
         const res = await client.query<{ result: RpcResult }>(
           `SELECT advance_application_stage($1::UUID, $2::TEXT, $3::TEXT) AS result`,
           [APPLICATION_ID, "HIRED", null]
@@ -344,8 +354,8 @@ describe.skipIf(!isDbConfigured)("RF33: Integração Real com Banco PostgreSQL",
         const client = await pool.connect();
         try {
           await client.query("BEGIN");
-          await client.query(`SET LOCAL app.current_user_id = '${RECRUITER_ID}'`);
-          await client.query(`SET LOCAL app.current_role = 'authenticated'`);
+          await client.query("SELECT set_config('app.current_user_id', $1, true)", [RECRUITER_ID]);
+          await client.query("SELECT set_config('app.current_role', 'authenticated', true)");
           const res = await client.query<{ result: { success: boolean; error_code?: string } }>(
             `SELECT advance_application_stage($1::UUID, $2::TEXT, $3::TEXT) AS result`,
             [APPLICATION_ID_CONCURRENT, "INTERVIEW", "Concorrência CI"]
