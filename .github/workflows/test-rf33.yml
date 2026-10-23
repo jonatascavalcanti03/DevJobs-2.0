@@ -1,0 +1,276 @@
+name: RF33 — Testes de Integração (PostgreSQL Efêmero)
+
+# Executado em:
+#   - Pull Requests que tocam arquivos relacionados ao RF33
+#   - Disparo manual (workflow_dispatch) para validação pontual
+#
+# RESTRIÇÕES DE SEGURANÇA APLICADAS:
+#   [S1] POSTGRES_USER = postgres → necessário porque a migration 00010 executa
+#        ALTER FUNCTION advance_application_stage OWNER TO postgres.
+#        Usar test_runner (não-superuser) faria este ALTER falhar pois
+#        somente superusers ou membros do role alvo podem transferir propriedade.
+#   [S2] Nenhum secret de produção é referenciado (sem ${{ secrets.SUPABASE_* }}).
+#   [S3] NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são forçados a vazio,
+#        impedindo que qualquer cliente Supabase inicialize.
+#   [S4] A variável TEST_DATABASE_URL aponta exclusivamente para o serviço
+#        PostgreSQL efêmero deste job — nunca para o banco remoto.
+#   [S5] O CLI `supabase` NÃO é instalado. `supabase db push` é impossível.
+#   [S6] O banco é destruído automaticamente ao término do job pelo runner.
+#
+# ANTI-SKIP:
+#   O teste de conformidade em pipeline-rf33-db.test.ts verifica que
+#   executedTests contém exatamente [1, 2, 3, 4, 5].
+#   Se isDbConfigured for false (TEST_DATABASE_URL ausente), esse teste
+#   emite um warning mas não falha — comportamento intencional para ambiente local.
+#   Na CI, TEST_DATABASE_URL está sempre presente; a suite completa roda.
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "supabase/migrations/00001_core_identity.sql"
+      - "supabase/migrations/00002_candidate.sql"
+      - "supabase/migrations/00003_company.sql"
+      - "supabase/migrations/00004_recruitment.sql"
+      - "supabase/migrations/00005_interviews.sql"
+      - "supabase/migrations/00006_audit.sql"
+      - "supabase/migrations/00007_rls_policies.sql"
+      - "supabase/migrations/00008_auth_user_bootstrap.sql"
+      - "supabase/migrations/00010_rf33_atomic_stage_history.sql"
+      - "lib/actions/company-jobs.ts"
+      - "lib/validations/company/pipeline.schema.ts"
+      - "tests/integration/pipeline-rf33-db.test.ts"
+      - "tests/unit/pipeline-rf33.test.ts"
+      - "ci/setup/**"
+      - ".github/workflows/test-rf33.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration-rf33:
+    name: "RF33 — PostgreSQL Descartável"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # -------------------------------------------------------------------------
+    # Serviço PostgreSQL isolado
+    # POSTGRES_USER = postgres [S1]: obrigatório para ALTER FUNCTION OWNER TO postgres.
+    # -------------------------------------------------------------------------
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_test_password_not_production
+          POSTGRES_DB: devjobs_rf33_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    # -------------------------------------------------------------------------
+    # Ambiente do job — sem credenciais de produção [S2, S3]
+    # -------------------------------------------------------------------------
+    env:
+      TEST_DATABASE_URL: "postgres://postgres:ci_test_password_not_production@localhost:5432/devjobs_rf33_test"
+      # Força clientes Supabase a não inicializarem [S3]
+      NEXT_PUBLIC_SUPABASE_URL: ""
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      PGPASSWORD: "ci_test_password_not_production"
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Código
+      # -----------------------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Node.js e dependências
+      # -----------------------------------------------------------------------
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # -----------------------------------------------------------------------
+      # 3. Provisionamento do banco de teste
+      #
+      #    Ordem obrigatória:
+      #      a) auth_mock.sql         — cria schema auth, roles e funções mock
+      #      b) 00001 a 00008         — migrations do projeto
+      #      c) migration_00009_stub  — substituto de 00009 (Storage não disponível)
+      #      d) 00010                 — função advance_application_stage + RLS RF33
+      #      e) rf33_fixtures.sql     — dados de teste determinísticos
+      # -----------------------------------------------------------------------
+      - name: "Provisionar: schema auth sintético"
+        run: psql -h localhost -U postgres -d devjobs_rf33_test -f ci/setup/auth_mock.sql
+
+      - name: "Provisionar: migrations 00001-00008"
+        run: |
+          psql -h localhost -U postgres -d devjobs_rf33_test -f supabase/migrations/00001_core_identity.sql
+          psql -h localhost -U postgres -d devjobs_rf33_test -f supabase/migrations/00002_candidate.sql
+          psql -h localhost -U postgres -d devjobs_rf33_test -f supabase/migrations/00003_company.sql
+          psql -h localhost -U postgres -d devjobs_rf33_test -f supabase/migrations/00004_recruitment.sql
+          psql -h localhost -U postgres -d devjobs_rf33_test -f supabase/migrations/00005_interviews.sql
+          psql -h localhost -U postgres -d devjobs_rf33_test -f supabase/migrations/00006_audit.sql
+          psql -h localhost -U postgres -d devjobs_rf33_test -f supabase/migrations/00007_rls_policies.sql
+          psql -h localhost -U postgres -d devjobs_rf33_test -f supabase/migrations/00008_auth_user_bootstrap.sql
+
+      - name: "Provisionar: stub 00009 (Storage omitido, não relevante ao RF33)"
+        run: psql -h localhost -U postgres -d devjobs_rf33_test -f ci/setup/migration_00009_stub.sql
+
+      - name: "Provisionar: migration 00010 (RF33 — advance_application_stage)"
+        run: psql -h localhost -U postgres -d devjobs_rf33_test -f supabase/migrations/00010_rf33_atomic_stage_history.sql
+
+      - name: "Provisionar: fixtures de teste RF33"
+        run: psql -h localhost -U postgres -d devjobs_rf33_test -f ci/setup/rf33_fixtures.sql
+
+      # -----------------------------------------------------------------------
+      # 4. Verificar integridade do banco provisionado
+      # -----------------------------------------------------------------------
+      - name: "Verificar banco: função advance_application_stage existe"
+        run: |
+          psql -h localhost -U postgres -d devjobs_rf33_test -c \
+            "SELECT proname, prosecdef, proowner::regrole
+             FROM pg_proc
+             WHERE proname = 'advance_application_stage'
+               AND pronamespace = 'public'::regnamespace;"
+
+      - name: "Verificar banco: fixtures presentes"
+        run: |
+          psql -h localhost -U postgres -d devjobs_rf33_test -c \
+            "SELECT
+               (SELECT COUNT(*) FROM public.applications)           AS applications,
+               (SELECT COUNT(*) FROM public.company_members)        AS members,
+               (SELECT COUNT(*) FROM public.jobs)                   AS jobs;"
+
+      # -----------------------------------------------------------------------
+      # 5. Testes unitários (não dependem de banco)
+      # -----------------------------------------------------------------------
+      - name: "Testes unitários RF33"
+        run: npm run test:unit -- --reporter=verbose
+
+      # -----------------------------------------------------------------------
+      # 6. Testes de integração RF33 com banco real
+      # -----------------------------------------------------------------------
+      - name: "Testes de integração RF33"
+        run: |
+          npx vitest run tests/integration/pipeline-rf33-db.test.ts \
+            --reporter=verbose \
+            --reporter=json \
+            --outputFile=test-results-rf33.json
+
+      # -----------------------------------------------------------------------
+      # 7. Anti-skip: verificar que nenhum dos 5 testes foi omitido
+      #
+      #    O arquivo test-results-rf33.json é gerado pelo reporter json do Vitest.
+      #    O script lê os resultados e falha o job se houver testes com
+      #    status 'pending' (skipped) dentro da suite de integração real.
+      # -----------------------------------------------------------------------
+      - name: "Anti-skip: verificar que todos os 5 testes de integração executaram"
+        run: |
+          node --input-type=module << 'EOF'
+          import { readFileSync } from 'fs';
+
+          let raw;
+          try {
+            raw = readFileSync('test-results-rf33.json', 'utf-8');
+          } catch {
+            console.error('FALHA: test-results-rf33.json não encontrado.');
+            process.exit(1);
+          }
+
+          const report = JSON.parse(raw);
+
+          // Vitest JSON output: report.testResults[].assertionResults[]
+          const allTests = (report.testResults ?? [])
+            .flatMap(f => f.assertionResults ?? []);
+
+          const integrationTests = allTests.filter(t =>
+            t.ancestorTitles?.includes('RF33: Integração Real com Banco PostgreSQL')
+          );
+
+          // Lista estável dos 5 prefixos esperados na suite de integração
+          const expectedPrefixes = [
+            "1. [DB Real]",
+            "2. [DB Real]",
+            "3. [DB Real]",
+            "4. [DB Real]",
+            "5. [DB Real]",
+          ];
+
+          const missing = [];
+          const notPassed = [];
+          const matchedTitles = new Set();
+
+          for (const prefix of expectedPrefixes) {
+            const matches = integrationTests.filter(t => t.title?.startsWith(prefix));
+
+            if (matches.length === 0) {
+              missing.push(prefix);
+            } else if (matches.length > 1) {
+              console.error(`FALHA: Teste duplicado detectado para o prefixo '${prefix}' (${matches.length} ocorrências).`);
+              process.exit(1);
+            } else {
+              const test = matches[0];
+              matchedTitles.add(test.title);
+              if (test.status !== 'passed') {
+                notPassed.push({ title: test.title, status: test.status });
+              }
+            }
+          }
+
+          if (missing.length > 0) {
+            console.error(`FALHA: ${missing.length} teste(s) de integração esperados não foram encontrados:`);
+            missing.forEach(m => console.error(`  - Ausente: ${m}`));
+            process.exit(1);
+          }
+
+          if (notPassed.length > 0) {
+            console.error(`FALHA: ${notPassed.length} teste(s) não possuem status 'passed':`);
+            notPassed.forEach(t => console.error(`  - ${t.title} [status: ${t.status}]`));
+            process.exit(1);
+          }
+
+          if (integrationTests.length !== 5) {
+            console.error(`FALHA: Esperados exatamente 5 testes de integração, encontrados ${integrationTests.length}.`);
+            process.exit(1);
+          }
+
+          console.log(`OK: Todos os 5 testes de integração esperados executaram com status 'passed'.`);
+          EOF
+
+      # -----------------------------------------------------------------------
+      # 8. Confirmar isolamento (documentação de auditoria)
+      # -----------------------------------------------------------------------
+      - name: "Confirmar isolamento — sem acesso ao Supabase remoto"
+        if: always()
+        run: |
+          echo "=== Auditoria de isolamento ==="
+          echo "NEXT_PUBLIC_SUPABASE_URL  : '${NEXT_PUBLIC_SUPABASE_URL}' (vazio = isolado)"
+          echo "SUPABASE_SERVICE_ROLE_KEY : '${SUPABASE_SERVICE_ROLE_KEY}' (vazio = isolado)"
+          echo "TEST_DATABASE_URL aponta para localhost:5432 (efêmero, destruído ao fim do job)"
+          echo "Nenhum comando supabase foi executado neste workflow."
+
+      # -----------------------------------------------------------------------
+      # 9. Upload de artefatos de teste para diagnóstico
+      # -----------------------------------------------------------------------
+      - name: Upload resultados de teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rf33-test-results
+          path: test-results-rf33.json
+          retention-days: 7
