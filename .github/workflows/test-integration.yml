@@ -21,6 +21,19 @@ name: Testes de Integração e Segurança (PostgreSQL Efêmero)
 #   Falha obrigatória do job se qualquer um for pulado.
 
 on:
+  push:
+    branches:
+      - "ci/rf33-integration-tests"
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "supabase/migrations/**"
+      - "lib/actions/**"
+      - "lib/validations/**"
+      - "tests/integration/**"
+      - "tests/unit/**"
+      - "ci/setup/**"
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "package.json"

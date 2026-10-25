@@ -67,23 +67,23 @@ ON CONFLICT (id) DO NOTHING;
 -- CANDIDATO 3 — para testes de isolamento entre candidatos
 -- ===========================================================================
 INSERT INTO auth.users (id, email)
-VALUES ('g5g5g5g5-0000-0000-0000-000000000055'::UUID, 'candidate3@ci.test')
+VALUES ('55555555-0000-0000-0000-000000000055'::UUID, 'candidate3@ci.test')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.users (id, email, role)
-VALUES ('g5g5g5g5-0000-0000-0000-000000000055'::UUID, 'candidate3@ci.test', 'CANDIDATE')
+VALUES ('55555555-0000-0000-0000-000000000055'::UUID, 'candidate3@ci.test', 'CANDIDATE')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.candidate_profiles (id, user_id)
-VALUES ('h6h6h6h6-0000-0000-0000-000000000066'::UUID, 'g5g5g5g5-0000-0000-0000-000000000055'::UUID)
+VALUES ('66666666-0000-0000-0000-000000000066'::UUID, '55555555-0000-0000-0000-000000000055'::UUID)
 ON CONFLICT (id) DO NOTHING;
 
 -- Candidatura do candidato 3 para a vaga da Empresa A (para teste de cross-candidate)
 INSERT INTO public.applications (id, job_id, candidate_id, status)
 VALUES (
-    'i7i7i7i7-0000-0000-0000-000000000077'::UUID,
+    '77777777-0000-0000-0000-000000000077'::UUID,
     'f6f6f6f6-0000-0000-0000-000000000006'::UUID,
-    'h6h6h6h6-0000-0000-0000-000000000066'::UUID,
+    '66666666-0000-0000-0000-000000000066'::UUID,
     'SUBMITTED'
 )
 ON CONFLICT (id) DO NOTHING;
@@ -94,6 +94,6 @@ ON CONFLICT (id) DO NOTHING;
 SELECT set_config('ci.recruiter_b_user_id',  'd1d1d1d1-0000-0000-0000-000000000011', false);
 SELECT set_config('ci.company_b_id',         'e2e2e2e2-0000-0000-0000-000000000022', false);
 SELECT set_config('ci.job_b_id',             'a4a4a4a4-0000-0000-0000-000000000044', false);
-SELECT set_config('ci.candidate3_user_id',   'g5g5g5g5-0000-0000-0000-000000000055', false);
-SELECT set_config('ci.candidate3_profile_id','h6h6h6h6-0000-0000-0000-000000000066', false);
-SELECT set_config('ci.application_id_3',     'i7i7i7i7-0000-0000-0000-000000000077', false);
+SELECT set_config('ci.candidate3_user_id',   '55555555-0000-0000-0000-000000000055', false);
+SELECT set_config('ci.candidate3_profile_id','66666666-0000-0000-0000-000000000066', false);
+SELECT set_config('ci.application_id_3',     '77777777-0000-0000-0000-000000000077', false);
