@@ -1,0 +1,253 @@
+name: Testes de Integração e Segurança (PostgreSQL Efêmero)
+
+# Executado em:
+#   - Pull Requests que tocam banco, RLS, regras de negócio ou testes
+#   - Disparo manual (workflow_dispatch) para validação sob demanda
+#
+# RESTRIÇÕES DE SEGURANÇA APLICADAS:
+#   [S1] POSTGRES_USER = postgres → necessário porque as migrations executam
+#        ALTER FUNCTION ... OWNER TO postgres.
+#   [S2] Nenhum secret de produção é referenciado.
+#   [S3] NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são forçados a vazio.
+#   [S4] A variável TEST_DATABASE_URL aponta exclusivamente para o serviço
+#        PostgreSQL efêmero deste job — nunca para o banco remoto.
+#   [S5] O CLI `supabase` NÃO é instalado. `supabase db push` é impossível.
+#   [S6] O banco é destruído automaticamente ao término do job pelo runner.
+#
+# ANTI-SKIP:
+#   - RF33 (pipeline-rf33-db.test.ts): 5 testes obrigatórios.
+#   - RLS/Segurança (security-rls.test.ts): 14 testes obrigatórios.
+#   Total: 19 testes de integração reais contra PostgreSQL.
+#   Falha obrigatória do job se qualquer um for pulado.
+
+on:
+  pull_request:
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "supabase/migrations/**"
+      - "lib/actions/**"
+      - "lib/validations/**"
+      - "tests/integration/**"
+      - "tests/unit/**"
+      - "ci/setup/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration-and-security:
+    name: "Integração & Segurança — PostgreSQL Descartável"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # -------------------------------------------------------------------------
+    # Serviço PostgreSQL isolado
+    # -------------------------------------------------------------------------
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_test_password_not_production
+          POSTGRES_DB: devjobs_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    # -------------------------------------------------------------------------
+    # Ambiente do job — sem credenciais de produção
+    # -------------------------------------------------------------------------
+    env:
+      TEST_DATABASE_URL: "postgres://postgres:ci_test_password_not_production@localhost:5432/devjobs_ci_test"
+      NEXT_PUBLIC_SUPABASE_URL: ""
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
+      SUPABASE_SERVICE_ROLE_KEY: ""
+      PGPASSWORD: "ci_test_password_not_production"
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Node.js e dependências
+      # -----------------------------------------------------------------------
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # -----------------------------------------------------------------------
+      # 3. Provisionamento ordenado do banco de teste
+      # -----------------------------------------------------------------------
+      - name: "Provisionar: schema auth sintético"
+        run: psql -h localhost -U postgres -d devjobs_ci_test -f ci/setup/auth_mock.sql
+
+      - name: "Provisionar: migrations 00001-00008"
+        run: |
+          psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00001_core_identity.sql
+          psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00002_candidate.sql
+          psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00003_company.sql
+          psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00004_recruitment.sql
+          psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00005_interviews.sql
+          psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00006_audit.sql
+          psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00007_rls_policies.sql
+          psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00008_auth_user_bootstrap.sql
+
+      - name: "Provisionar: stub 00009 (Storage omitido, não relevante a banco relacional)"
+        run: psql -h localhost -U postgres -d devjobs_ci_test -f ci/setup/migration_00009_stub.sql
+
+      - name: "Provisionar: migration 00010 (RF33 — advance_application_stage)"
+        run: psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00010_rf33_atomic_stage_history.sql
+
+      - name: "Provisionar: migration 00011 (RF29 — withdraw_application)"
+        run: psql -h localhost -U postgres -d devjobs_ci_test -f supabase/migrations/00011_rf29_atomic_withdraw.sql
+
+      - name: "Provisionar: fixtures RF33"
+        run: psql -h localhost -U postgres -d devjobs_ci_test -f ci/setup/rf33_fixtures.sql
+
+      - name: "Provisionar: fixtures RF29 / RLS"
+        run: psql -h localhost -U postgres -d devjobs_ci_test -f ci/setup/rf29_fixtures.sql
+
+      # -----------------------------------------------------------------------
+      # 4. Verificar integridade do schema provisionado
+      # -----------------------------------------------------------------------
+      - name: "Verificar RPCs advance_application_stage e withdraw_application"
+        run: |
+          psql -h localhost -U postgres -d devjobs_ci_test -c \
+            "SELECT proname, prosecdef, proowner::regrole
+             FROM pg_proc
+             WHERE proname IN ('advance_application_stage', 'withdraw_application')
+               AND pronamespace = 'public'::regnamespace;"
+
+      - name: "Verificar entidades carregadas"
+        run: |
+          psql -h localhost -U postgres -d devjobs_ci_test -c \
+            "SELECT
+               (SELECT COUNT(*) FROM public.users)                  AS users,
+               (SELECT COUNT(*) FROM public.company_profiles)       AS companies,
+               (SELECT COUNT(*) FROM public.candidate_profiles)     AS candidates,
+               (SELECT COUNT(*) FROM public.jobs)                   AS jobs,
+               (SELECT COUNT(*) FROM public.applications)           AS applications;"
+
+      # -----------------------------------------------------------------------
+      # 5. Typecheck & Lint
+      # -----------------------------------------------------------------------
+      - name: "TypeScript Typecheck"
+        run: npm run typecheck
+
+      - name: "ESLint"
+        run: npm run lint
+
+      # -----------------------------------------------------------------------
+      # 6. Testes Unitários
+      # -----------------------------------------------------------------------
+      - name: "Testes Unitários"
+        run: npm run test:unit -- --reporter=verbose
+
+      # -----------------------------------------------------------------------
+      # 7. Execução dos 19 Testes de Integração com Banco Real
+      # -----------------------------------------------------------------------
+      - name: "Testes de Integração (RF33 + Segurança RLS)"
+        run: |
+          npx vitest run tests/integration \
+            --reporter=verbose \
+            --reporter=json \
+            --outputFile=test-results-integration.json
+
+      # -----------------------------------------------------------------------
+      # 8. Anti-Skip Verifier: 19 testes obrigatórios
+      # -----------------------------------------------------------------------
+      - name: "Anti-skip: verificar que todos os 19 testes de integração executaram"
+        run: |
+          node --input-type=module << 'EOF'
+          import { readFileSync } from 'fs';
+
+          let raw;
+          try {
+            raw = readFileSync('test-results-integration.json', 'utf-8');
+          } catch {
+            console.error('FALHA: test-results-integration.json não encontrado.');
+            process.exit(1);
+          }
+
+          const report = JSON.parse(raw);
+          const allTests = (report.testResults ?? [])
+            .flatMap(f => f.assertionResults ?? []);
+
+          // RF33 tests (5 esperados)
+          const rf33Tests = allTests.filter(t =>
+            t.ancestorTitles?.includes('RF33: Integração Real com Banco PostgreSQL')
+          );
+
+          // RLS tests (14 esperados)
+          const rlsTests = allTests.filter(t =>
+            t.ancestorTitles?.includes('Segurança RLS e Autorização — Integração Real')
+          );
+
+          console.log(`Testes RF33 encontrados: ${rf33Tests.length}/5`);
+          console.log(`Testes RLS encontrados: ${rlsTests.length}/14`);
+
+          const failedRf33 = rf33Tests.filter(t => t.status !== 'passed');
+          const failedRls = rlsTests.filter(t => t.status !== 'passed');
+
+          if (rf33Tests.length !== 5) {
+            console.error(`FALHA: Esperados 5 testes de integração RF33, encontrados ${rf33Tests.length}.`);
+            process.exit(1);
+          }
+
+          if (rlsTests.length !== 14) {
+            console.error(`FALHA: Esperados 14 testes de integração RLS, encontrados ${rlsTests.length}.`);
+            process.exit(1);
+          }
+
+          if (failedRf33.length > 0 || failedRls.length > 0) {
+            console.error(`FALHA: Existem testes não aprovados:`);
+            [...failedRf33, ...failedRls].forEach(t => console.error(`  - ${t.title} [status: ${t.status}]`));
+            process.exit(1);
+          }
+
+          console.log(`OK: Todos os 19 testes de integração executaram e foram aprovados com sucesso.`);
+          EOF
+
+      # -----------------------------------------------------------------------
+      # 9. Build de Produção
+      # -----------------------------------------------------------------------
+      - name: "Next.js Build"
+        run: npm run build
+
+      # -----------------------------------------------------------------------
+      # 10. Confirmar isolamento
+      # -----------------------------------------------------------------------
+      - name: "Confirmar isolamento — sem acesso ao Supabase remoto"
+        if: always()
+        run: |
+          echo "=== Auditoria de isolamento ==="
+          echo "NEXT_PUBLIC_SUPABASE_URL  : '${NEXT_PUBLIC_SUPABASE_URL}' (vazio = isolado)"
+          echo "SUPABASE_SERVICE_ROLE_KEY : '${SUPABASE_SERVICE_ROLE_KEY}' (vazio = isolado)"
+          echo "TEST_DATABASE_URL aponta para localhost:5432 (efêmero, destruído ao fim do job)"
+          echo "Nenhum comando supabase foi executado neste workflow."
+
+      # -----------------------------------------------------------------------
+      # 11. Upload de artefatos de teste
+      # -----------------------------------------------------------------------
+      - name: Upload resultados de teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: test-results-integration.json
+          retention-days: 7
