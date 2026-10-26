@@ -177,6 +177,7 @@ jobs:
       - name: "Testes de Integração (RF33 + Segurança RLS)"
         run: |
           npx vitest run tests/integration \
+            --fileParallelism=false \
             --reporter=verbose \
             --reporter=json \
             --outputFile=test-results-integration.json

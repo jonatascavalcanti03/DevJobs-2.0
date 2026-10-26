@@ -48,6 +48,7 @@ const APPLICATION_A_ID = "a9a9a9a9-0000-0000-0000-000000000009";
 const RECRUITER_B_ID  = "d1d1d1d1-0000-0000-0000-000000000011";
 const COMPANY_B_ID    = "e2e2e2e2-0000-0000-0000-000000000022";
 const _JOB_B_ID       = "a4a4a4a4-0000-0000-0000-000000000044";
+const APPLICATION_B_ID = "88888888-0000-0000-0000-000000000088";
 const CANDIDATE_3_ID  = "55555555-0000-0000-0000-000000000055";
 const CANDIDATE_3_PROFILE_ID = "66666666-0000-0000-0000-000000000066";
 const APPLICATION_3_ID = "77777777-0000-0000-0000-000000000077";
@@ -120,16 +121,16 @@ describe.skipIf(!isDbConfigured)("Segurança RLS e Autorização — Integraçã
 
   afterAll(async () => {
     if (pool) {
-      // Restaurar estado das candidaturas usadas nos testes de withdraw
+      // Restaurar estado das candidaturas usadas nos testes
       await pool.query(
         `UPDATE public.applications SET status = 'SUBMITTED', updated_at = NOW()
          WHERE id = ANY($1::UUID[])`,
-        [[APPLICATION_A_ID, APPLICATION_3_ID]]
+        [[APPLICATION_A_ID, APPLICATION_3_ID, APPLICATION_B_ID]]
       );
       await pool.query(
         `DELETE FROM public.application_stage_history
          WHERE application_id = ANY($1::UUID[])`,
-        [[APPLICATION_A_ID, APPLICATION_3_ID]]
+        [[APPLICATION_A_ID, APPLICATION_3_ID, APPLICATION_B_ID]]
       );
       await pool.end();
     }
@@ -179,19 +180,91 @@ describe.skipIf(!isDbConfigured)("Segurança RLS e Autorização — Integraçã
 
     it("4. [DB Real] Recrutador A pode avançar candidatura de vaga A; Recrutador B não pode", async () => {
       executedSecurityTests.push(4);
-      // Recrutador B tenta avançar candidatura da Empresa A
-      const { result } = await callRpcAsUser(
+
+      // Limpar histórico prévio da candidatura A para validação estrita de efeitos colaterais
+      await pool.query(
+        `UPDATE public.applications SET status = 'SUBMITTED', updated_at = NOW() WHERE id = $1`,
+        [APPLICATION_A_ID]
+      );
+      await pool.query(
+        `DELETE FROM public.application_stage_history WHERE application_id = $1`,
+        [APPLICATION_A_ID]
+      );
+
+      // (A) Usuário NÃO autenticado NÃO consegue executar a operação
+      const anonClient = await pool.connect();
+      let anonResult: unknown = null;
+      try {
+        await anonClient.query("BEGIN");
+        // Sem definir app.current_user_id -> auth.uid() é NULL
+        const res = await anonClient.query<{ result: unknown }>(
+          `SELECT advance_application_stage($1::UUID, $2::TEXT, $3::TEXT) AS result`,
+          [APPLICATION_A_ID, "SCREENING", null]
+        );
+        await anonClient.query("COMMIT");
+        anonResult = res.rows[0]?.result;
+      } finally {
+        await anonClient.query("ROLLBACK").catch(() => {});
+        anonClient.release();
+      }
+      const anonR = anonResult as { success?: boolean; error_code?: string } | null;
+      expect(anonR?.success).toBe(false);
+      expect(anonR?.error_code).toBe("UNAUTHENTICATED");
+
+      // (B) Recrutador B (Empresa B) tenta indevidamente avançar candidatura da Empresa A
+      const { result: forbiddenResult } = await callRpcAsUser(
         RECRUITER_B_ID,
         "advance_application_stage",
         {
           _application_id: APPLICATION_A_ID,
           _new_status: "SCREENING",
-          _notes: null,
+          _notes: "Tentativa não autorizada pelo Recrutador B",
         }
       );
-      const r = result as { success?: boolean; error_code?: string } | null;
-      expect(r?.success).toBe(false);
-      expect(r?.error_code).toBe("FORBIDDEN");
+      const rForbidden = forbiddenResult as { success?: boolean; error_code?: string } | null;
+      expect(rForbidden?.success).toBe(false);
+      expect(rForbidden?.error_code).toBe("FORBIDDEN");
+
+      // (C) Comprovação de ausência de efeitos colaterais: status permanece SUBMITTED e nenhum histórico criado
+      const appRowAfterForbidden = await pool.query<{ status: string }>(
+        `SELECT status FROM public.applications WHERE id = $1`,
+        [APPLICATION_A_ID]
+      );
+      expect(appRowAfterForbidden.rows[0]?.status).toBe("SUBMITTED");
+
+      const histCountAfterForbidden = await pool.query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM public.application_stage_history WHERE application_id = $1`,
+        [APPLICATION_A_ID]
+      );
+      expect(Number(histCountAfterForbidden.rows[0]?.count)).toBe(0);
+
+      // (D) Recrutador A (Empresa A) avança legitimamente a candidatura da Empresa A
+      const { result: successResultA } = await callRpcAsUser(
+        RECRUITER_A_ID,
+        "advance_application_stage",
+        {
+          _application_id: APPLICATION_A_ID,
+          _new_status: "SCREENING",
+          _notes: "Avanço legítimo pelo Recrutador A",
+        }
+      );
+      const rSuccessA = successResultA as { success?: boolean; new_status?: string } | null;
+      expect(rSuccessA?.success).toBe(true);
+      expect(rSuccessA?.new_status).toBe("SCREENING");
+
+      // (E) Recrutador B (Empresa B) continua conseguindo avançar normalmente candidaturas da própria empresa (Empresa B)
+      const { result: successResultB } = await callRpcAsUser(
+        RECRUITER_B_ID,
+        "advance_application_stage",
+        {
+          _application_id: APPLICATION_B_ID,
+          _new_status: "SCREENING",
+          _notes: "Avanço legítimo pelo Recrutador B na própria vaga",
+        }
+      );
+      const rSuccessB = successResultB as { success?: boolean; new_status?: string } | null;
+      expect(rSuccessB?.success).toBe(true);
+      expect(rSuccessB?.new_status).toBe("SCREENING");
     });
   });
 

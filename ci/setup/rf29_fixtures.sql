@@ -88,6 +88,16 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- Candidatura do candidato 1 para a vaga da Empresa B (para teste de avanço legítimo pelo Recrutador B)
+INSERT INTO public.applications (id, job_id, candidate_id, status)
+VALUES (
+    '88888888-0000-0000-0000-000000000088'::UUID,
+    'a4a4a4a4-0000-0000-0000-000000000044'::UUID,
+    'e5e5e5e5-0000-0000-0000-000000000005'::UUID,
+    'SUBMITTED'
+)
+ON CONFLICT (id) DO NOTHING;
+
 -- ===========================================================================
 -- Exportar IDs como configurações de sessão
 -- ===========================================================================
