@@ -158,7 +158,7 @@ BEGIN
     -- -------------------------------------------------------------------------
     v_company_role := public.get_user_company_role(v_company_id);
 
-    IF v_company_role NOT IN ('OWNER', 'ADMIN') THEN
+    IF v_company_role IS NULL OR v_company_role NOT IN ('OWNER', 'ADMIN') THEN
         RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'error_code', 'FORBIDDEN',
