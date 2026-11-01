@@ -40,6 +40,16 @@
   --color-status-warning: #F59E0B;
   --color-status-error: #EF4444;
 
+  /* Superfícies e Elevações Premium (Etapa 1) */
+  --color-surface-elevated: #152554;
+  --color-surface-glass: rgba(13, 27, 62, 0.72);
+  --color-surface-glass-hover: rgba(21, 37, 84, 0.85);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-glass-hover: rgba(56, 189, 248, 0.35);
+  --glow-cyan-subtle: 0 0 20px rgba(56, 189, 248, 0.2);
+  --glow-indigo-subtle: 0 0 24px rgba(99, 102, 241, 0.25);
+  --glow-emerald-subtle: 0 0 20px rgba(16, 185, 129, 0.2);
+
   /* Espaçamento (Escala 4px) */
   --space-1: 4px;
   --space-2: 8px;
@@ -3401,3 +3411,752 @@ body {
   color: var(--color-electric-blue);
 }
 
+/* ==========================================================================
+   Etapa 1: Componentes Visuais Reutilizáveis & Base Premium
+   ========================================================================== */
+
+/* 1. Adaptação do JobCard dentro do Grid do Catálogo de Vagas */
+.vagas-grid .job-card {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 250px;
+  background: var(--color-surface-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-card);
+  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.vagas-grid .job-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-glass-hover);
+  box-shadow: var(--shadow-card), var(--glow-cyan-subtle);
+}
+
+/* 2. MatchMeter Component */
+.match-meter-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  user-select: none;
+}
+
+.match-meter-wrap:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 4px;
+  border-radius: var(--radius-control);
+}
+
+.match-meter-caption {
+  font-family: var(--font-sans);
+  letter-spacing: 0.02em;
+}
+
+/* 3. StatCard Component */
+.stat-card {
+  position: relative;
+  outline: none;
+}
+
+.stat-card:hover,
+.stat-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--border-glass-hover) !important;
+  box-shadow: var(--shadow-card), var(--glow-indigo-subtle);
+}
+
+.stat-card:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* Shimmer Skeleton para StatCard */
+.stat-card-skeleton {
+  min-height: 120px;
+  background: rgba(13, 27, 62, 0.5) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.1) !important;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-card);
+}
+
+.stat-card-skeleton-header {
+  width: 40%;
+  height: 14px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.04) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 2s infinite linear;
+  border-radius: var(--radius-control);
+}
+
+.stat-card-skeleton-value {
+  width: 65%;
+  height: 32px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.04) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 2s infinite linear;
+  border-radius: var(--radius-control);
+}
+
+.stat-card-skeleton-subtitle {
+  width: 50%;
+  height: 12px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.04) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 2s infinite linear;
+  border-radius: var(--radius-control);
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* 4. TechLink Badge Component */
+.techlink-badge {
+  font-family: var(--font-sans);
+}
+
+.techlink-badge:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+
+
+/* ==========================================================================
+   Etapa 3: Catálogo Premium e Painel de Matching Integrado
+   ========================================================================== */
+
+/* 1. Job Card Title Link */
+.job-title-link {
+  color: var(--color-text-primary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.job-title-link:hover {
+  color: var(--color-electric-blue);
+}
+
+/* 2. Premium Job Card Specifics */
+.premium-job-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.job-card-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.job-card-match-preview {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.job-card-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.job-card-skill-tag {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-subtle);
+  transition: border-color var(--transition-fast);
+}
+
+.skill-tag-matched {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34D399;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.skill-tag-check {
+  font-weight: 700;
+  color: #10B981;
+}
+
+.job-card-skill-more {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  align-self: center;
+  padding: 0 4px;
+}
+
+.job-card-match-banner {
+  margin-top: auto;
+  padding-top: var(--space-2);
+  font-size: 0.8125rem;
+}
+
+.match-banner-hint {
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.match-banner-text {
+  color: var(--color-electric-blue);
+  margin: 0;
+}
+
+/* 3. Job Match Panel (Detalhes da Vaga) */
+.job-match-panel {
+  background: rgba(13, 27, 62, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-glass-hover);
+  border-radius: var(--radius-card);
+  padding: var(--space-6);
+  margin-bottom: var(--space-8);
+  box-shadow: var(--shadow-card), var(--glow-cyan-subtle);
+}
+
+.job-match-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: flex-start;
+  margin-bottom: var(--space-6);
+}
+
+@media (min-width: 768px) {
+  .job-match-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.job-match-header-left {
+  flex: 1;
+}
+
+.job-match-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.match-panel-tag {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-electric-blue);
+}
+
+.job-match-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.job-match-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.job-match-meter-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+}
+
+.job-match-explanation-box {
+  background: rgba(56, 189, 248, 0.08);
+  border-left: 3px solid var(--color-electric-blue);
+  padding: var(--space-4);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  margin-bottom: var(--space-6);
+}
+
+.job-match-explanation-text {
+  font-size: 0.9375rem;
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.job-match-breakdown-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+@media (min-width: 640px) {
+  .job-match-breakdown-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.match-breakdown-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.match-breakdown-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.match-breakdown-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.match-breakdown-score {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+}
+
+.match-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.match-progress-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transition: width 0.4s ease;
+}
+
+.fill-indigo {
+  background: #818CF8;
+}
+
+.fill-cyan {
+  background: #38BDF8;
+}
+
+.fill-emerald {
+  background: #34D399;
+}
+
+.match-breakdown-desc {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.job-match-skills-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.skills-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skills-group-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.skills-tags-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.job-match-feedback-box {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-control);
+  padding: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.feedback-box-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #FBBF24;
+  margin-bottom: var(--space-1);
+}
+
+.feedback-box-text {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.job-match-footer-note {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-4);
+}
+
+.job-match-footer-note p {
+  margin: 0;
+}
+
+/* 4. Detalhes de Competências da Vaga */
+.job-details-skills-section {
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.job-details-skills-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: var(--space-3);
+}
+
+.job-details-company-section {
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.job-details-company-info-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.company-info-row {
+  display: flex;
+  gap: var(--space-2);
+  font-size: 0.9375rem;
+}
+
+.company-info-label {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.company-info-val {
+  color: var(--color-text-primary);
+}
+
+/* ==========================================================================
+   Etapa 4: Redesign Premium dos Painéis (Candidato e Empresa)
+   ========================================================================== */
+
+/* 1. Header do Painel Premium e Stats Grid */
+.dashboard-premium-welcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+@media (min-width: 768px) {
+  .dashboard-premium-welcome {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.dashboard-welcome-info h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.dashboard-welcome-info p {
+  color: var(--color-text-secondary);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.dashboard-welcome-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.dashboard-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+@media (min-width: 640px) {
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* 2. Abas de Navegação Interna do Painel */
+.dashboard-tabs-nav {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-glass);
+  margin-bottom: var(--space-6);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+}
+
+.dashboard-tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.dashboard-tab-btn:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dashboard-tab-btn.active {
+  color: var(--color-electric-blue);
+  background: rgba(56, 189, 248, 0.1);
+  border-bottom: 2px solid var(--color-electric-blue);
+}
+
+/* 3. Cards Premium de Candidatura e Kanban */
+.dashboard-app-match-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #34D399;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+
+/* 4. Miniatura de Ações Rápidas */
+.dashboard-quick-actions-banner {
+  background: linear-gradient(135deg, rgba(13, 27, 62, 0.7) 0%, rgba(30, 58, 138, 0.4) 100%);
+  border: 1px solid var(--border-glass-hover);
+  border-radius: var(--radius-card);
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+
+@media (min-width: 768px) {
+  .dashboard-quick-actions-banner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.quick-actions-text h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+.quick-actions-text p {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* ==========================================================================
+   Etapa 5: Estilos do Painel Administrativo
+   ========================================================================== */
+
+.admin-companies-container,
+.admin-jobs-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.admin-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.admin-filter-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.admin-filter-select {
+  max-width: 200px;
+  height: 36px;
+  font-size: 0.8125rem;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-control);
+  background: rgba(7, 18, 46, 0.4);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.admin-table th {
+  background: rgba(13, 27, 62, 0.7);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-glass);
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+  vertical-align: middle;
+}
+
+.admin-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-subtext {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.admin-actions-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.admin-badge-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status-approved,
+.status-active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-pending,
+.status-paused {
+  background: rgba(245, 158, 11, 0.15);
+  color: #FBBF24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.status-rejected,
+.status-closed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #F87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.status-audit {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818CF8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+.btn-approve {
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34D399;
+}
+
+.btn-approve:hover {
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.btn-reject {
+  color: #F87171;
+}
+
+.btn-reject:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.btn-danger-subtle {
+  color: #F87171;
+}
+
+.btn-danger-subtle:hover {
+  background: rgba(239, 68, 68, 0.15);
+}

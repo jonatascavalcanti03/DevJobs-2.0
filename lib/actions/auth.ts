@@ -8,6 +8,7 @@ import { LoginSchema } from "@/lib/validations/auth.schema";
 import { CandidateRegisterSchema } from "@/lib/validations/candidate/register.schema";
 import { CompanyRegisterSchema } from "@/lib/validations/company/register.schema";
 import { RequestPasswordResetSchema, ResetPasswordSchema } from "@/lib/validations/auth/forgot-password.schema";
+import { logger } from "@/lib/logger";
 
 function getInternalRedirect(value: FormDataEntryValue | null): string {
   if (typeof value !== "string") return "/dashboard";
@@ -82,7 +83,20 @@ export async function registerCompany(formData: FormData) {
     return { error: "Este CNPJ já está cadastrado no sistema." };
   }
 
-  // 2. Criar credenciais de acesso no Supabase Auth
+  const admin = createAdminClient();
+
+  // 2. Verificar se o e-mail já existe previamente no banco antes do signUp
+  const { data: existingUserCheck } = await admin
+    .from("users")
+    .select("id")
+    .eq("email", parsed.data.email.toLowerCase().trim())
+    .maybeSingle();
+
+  if (existingUserCheck) {
+    return { error: "Este e-mail já está em uso no sistema." };
+  }
+
+  // 3. Criar credenciais de acesso no Supabase Auth
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
@@ -93,18 +107,107 @@ export async function registerCompany(formData: FormData) {
   }
 
   const userId = authData.user.id;
+  // Evidência confiável:
+  // 1) O e-mail não existia previamente na tabela public.users
+  // 2) authData.user.identities não está vazio (no Supabase, identities é [] quando a conta já existia)
+  const isNewUser = !existingUserCheck && Array.isArray(authData.user.identities) && authData.user.identities.length > 0;
+
+  let companyProfileId: string | null = null;
+  let memberCreated = false;
+
+  const compensateFailedRegistration = async (stepFailed: string, detailError: unknown): Promise<{ compensationFailed: boolean }> => {
+    logger.error(`[RF02] Falha na etapa '${stepFailed}' durante cadastro de empresa. Iniciando compensação.`, detailError, {
+      userId,
+    });
+
+    let compensationFailed = false;
+
+    // 1. Limpar vínculo de company_members (tabela dependente com FK para company_profiles e users)
+    if (memberCreated && companyProfileId) {
+      try {
+        const { error: deleteMemberError } = await admin
+          .from("company_members")
+          .delete()
+          .match({ company_id: companyProfileId, user_id: userId });
+        if (deleteMemberError) {
+          compensationFailed = true;
+          logger.error("[RF02] Falha ao limpar company_members na compensação.", deleteMemberError, { companyProfileId, userId });
+        }
+      } catch (cleanupMemberEx) {
+        compensationFailed = true;
+        logger.error("[RF02] Exceção ao limpar company_members na compensação.", cleanupMemberEx, { companyProfileId, userId });
+      }
+    }
+
+    // 2. Limpar company_profiles se já inserido
+    if (companyProfileId) {
+      try {
+        const { error: deleteProfileError } = await admin
+          .from("company_profiles")
+          .delete()
+          .eq("id", companyProfileId);
+        if (deleteProfileError) {
+          compensationFailed = true;
+          logger.error("[RF02] Falha ao limpar company_profile na compensação.", deleteProfileError, { companyProfileId });
+        }
+      } catch (cleanupProfileError) {
+        compensationFailed = true;
+        logger.error("[RF02] Exceção ao limpar company_profile na compensação.", cleanupProfileError, { companyProfileId });
+      }
+    }
+
+    // 3. Limpar public.users e auth.users apenas quando comprovadamente criado por esta tentativa
+    if (isNewUser) {
+      try {
+        const { error: deleteUserError } = await admin.from("users").delete().eq("id", userId);
+        if (deleteUserError) {
+          compensationFailed = true;
+          logger.error("[RF02] Falha ao limpar public.users na compensação.", deleteUserError, { userId });
+        }
+      } catch (cleanupUserError) {
+        compensationFailed = true;
+        logger.error("[RF02] Exceção ao limpar public.users na compensação.", cleanupUserError, { userId });
+      }
+
+      try {
+        const { error: deleteAuthError } = await admin.auth.admin.deleteUser(userId);
+        if (deleteAuthError) {
+          compensationFailed = true;
+          logger.error("[RF02] Falha ao deletar auth user na compensação.", deleteAuthError, { userId });
+        }
+      } catch (deleteAuthEx) {
+        compensationFailed = true;
+        logger.error("[RF02] Exceção ao deletar auth user na compensação.", deleteAuthEx, { userId });
+      }
+    }
+
+    if (compensationFailed) {
+      logger.error("[RF02] Compensação incompleta: alguns recursos não puderam ser limpos.", undefined, {
+        userId,
+        companyProfileId,
+      });
+    }
+
+    return { compensationFailed };
+  };
 
   try {
-    // 3. Garantir consistência atômica no backend (Service Role isolada)
-    const admin = createAdminClient();
-
-    // Atribuir papel COMPANY em public.users
-    await admin
+    // 4. Atribuir papel COMPANY em public.users
+    const { error: roleUpdateError } = await admin
       .from("users")
       .update({ role: "COMPANY" })
       .eq("id", userId);
 
-    // Inserir registro institucional em company_profiles
+    if (roleUpdateError) {
+      const { compensationFailed } = await compensateFailedRegistration("update_user_role", roleUpdateError);
+      return {
+        error: compensationFailed
+          ? "Falha ao configurar permissões da conta empresarial e a restauração automática encontrou falhas. Contate o suporte."
+          : "Erro ao configurar permissões da conta empresarial.",
+      };
+    }
+
+    // 5. Inserir registro institucional em company_profiles
     const { data: companyProfile, error: profileError } = await admin
       .from("company_profiles")
       .insert({
@@ -117,10 +220,17 @@ export async function registerCompany(formData: FormData) {
       .single();
 
     if (profileError || !companyProfile) {
-      return { error: "Erro ao registrar perfil institucional da empresa." };
+      const { compensationFailed } = await compensateFailedRegistration("create_company_profile", profileError);
+      return {
+        error: compensationFailed
+          ? "Falha ao registrar empresa e a restauração do cadastro encontrou pendências. Contate o suporte."
+          : "Erro ao registrar perfil institucional da empresa.",
+      };
     }
 
-    // Vincular usuário como OWNER da empresa
+    companyProfileId = companyProfile.id;
+
+    // 6. Vincular usuário como OWNER da empresa
     const { error: memberError } = await admin
       .from("company_members")
       .insert({
@@ -130,10 +240,22 @@ export async function registerCompany(formData: FormData) {
       });
 
     if (memberError) {
-      return { error: "Erro ao vincular administrador da empresa." };
+      const { compensationFailed } = await compensateFailedRegistration("create_company_member", memberError);
+      return {
+        error: compensationFailed
+          ? "Falha ao vincular gestor da empresa e a restauração do cadastro encontrou pendências. Contate o suporte."
+          : "Erro ao vincular administrador da empresa.",
+      };
     }
-  } catch {
-    return { error: "Falha na inicialização dos dados da empresa." };
+
+    memberCreated = true;
+  } catch (unexpectedError) {
+    const { compensationFailed } = await compensateFailedRegistration("unexpected_exception", unexpectedError);
+    return {
+      error: compensationFailed
+        ? "Falha inesperada na inicialização da empresa e a restauração automática encontrou pendências. Contate o suporte."
+        : "Falha na inicialização dos dados da empresa.",
+    };
   }
 
   revalidatePath("/", "layout");

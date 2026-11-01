@@ -242,3 +242,99 @@ export async function applyToJob(jobId: string): Promise<ApplyToJobResult> {
     };
   }
 }
+
+export interface WithdrawApplicationResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * RF29: Retirada de candidatura pelo próprio candidato autenticado.
+ *
+ * Executa via RPC `withdraw_application` (SECURITY DEFINER — Migration 00011):
+ * - UPDATE applications.status = 'WITHDRAWN'
+ * - INSERT application_stage_history
+ * em uma única transação PostgreSQL atômica.
+ *
+ * Garantias de Segurança e Domínio:
+ * 1. Autenticação obrigatória — validada dentro da RPC via auth.uid().
+ * 2. Propriedade confirmada no banco — candidate_profiles.user_id = auth.uid().
+ * 3. Validação de estados terminais no banco, não apenas na UI.
+ * 4. Atomicidade garantida: histórico nunca fica desatualizado em relação ao status.
+ * 5. Nunca utiliza Service Role Key / Admin client.
+ */
+export async function withdrawApplication(formData: FormData): Promise<WithdrawApplicationResult> {
+  const applicationId = formData.get("applicationId");
+
+  if (
+    !applicationId ||
+    typeof applicationId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(applicationId)
+  ) {
+    return {
+      success: false,
+      error: "Identificador de candidatura inválido.",
+    };
+  }
+
+  const supabase = await createClient();
+
+  // Verificação rápida de autenticação na camada da aplicação
+  // (a RPC também verifica — defesa em profundidade)
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return {
+      success: false,
+      error: "Você precisa estar conectado para retirar uma candidatura.",
+    };
+  }
+
+  // Chamada à RPC atômica (SECURITY DEFINER — Migration 00011)
+  const { data: rpcResult, error: rpcError } = await supabase.rpc(
+    "withdraw_application",
+    { _application_id: applicationId }
+  );
+
+  if (rpcError) {
+    console.error("[RF29] Falha na RPC withdraw_application:", {
+      code: rpcError.code,
+      message: rpcError.message,
+    });
+    return {
+      success: false,
+      error: "Não foi possível retirar a candidatura no momento. Tente novamente.",
+    };
+  }
+
+  const response = rpcResult as {
+    success?: boolean;
+    error_code?: string;
+    error_message?: string;
+  } | null;
+
+  if (!response || !response.success) {
+    const errorMap: Record<string, string> = {
+      UNAUTHENTICATED:   "Você precisa estar conectado para retirar uma candidatura.",
+      FORBIDDEN:         "Você não tem permissão para retirar esta candidatura.",
+      NOT_FOUND:         "Candidatura não encontrada.",
+      ALREADY_WITHDRAWN: "Esta candidatura já foi retirada anteriormente.",
+      TERMINAL_STATE:    "Não é possível retirar uma candidatura em processo já encerrado ou finalizado.",
+    };
+
+    return {
+      success: false,
+      error: (response?.error_code && errorMap[response.error_code])
+        ? errorMap[response.error_code]
+        : response?.error_message || "Não foi possível retirar a candidatura.",
+    };
+  }
+
+  revalidatePath("/dashboard/candidato");
+  revalidatePath("/dashboard/empresa");
+  return { success: true };
+}
+

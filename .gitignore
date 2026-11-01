@@ -102,3 +102,5 @@ lerna-debug.log*
 scaffold.bat
 /supabase/.temp/
 
+/supabase/.branches/
+.vitest-*-probe.json

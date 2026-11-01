@@ -21,9 +21,13 @@ export default async function DashboardIndex() {
 
   const role = userData.role;
 
+  if (role === "ADMIN") {
+    redirect("/admin");
+  }
+
   if (role === "COMPANY") {
     redirect("/dashboard/empresa");
-  } else {
-    redirect("/dashboard/candidato");
   }
+
+  redirect("/dashboard/candidato");
 }

@@ -88,8 +88,89 @@ export const LanguageSchema = z
   })
   .strict();
 
+export const MAX_RESUME_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+export const ResumeUploadSchema = z.object({
+  fileName: z
+    .string({ required_error: "Nome do arquivo é obrigatório." })
+    .trim()
+    .min(1, "Nome do arquivo não pode ser vazio.")
+    .refine((name) => name.toLowerCase().endsWith(".pdf"), {
+      message: "O currículo deve ter a extensão .pdf.",
+    }),
+  fileSize: z
+    .number({ required_error: "Tamanho do arquivo é obrigatório." })
+    .positive("O arquivo não pode ser vazio.")
+    .max(MAX_RESUME_FILE_SIZE, "O currículo não pode ultrapassar o limite de 5MB."),
+  mimeType: z
+    .string({ required_error: "Tipo MIME é obrigatório." })
+    .refine((type) => type === "application/pdf", {
+      message: "Apenas arquivos no formato PDF são aceitos.",
+    }),
+});
+
+export const SkillSchema = z
+  .object({
+    name: z
+      .string({ required_error: "Nome da competência é obrigatório." })
+      .trim()
+      .min(1, "A competência não pode ser vazia.")
+      .max(50, "A competência deve ter no máximo 50 caracteres."),
+  })
+  .strict();
+
+export const ProjectSchema = z
+  .object({
+    name: z
+      .string({ required_error: "Nome do projeto é obrigatório." })
+      .trim()
+      .min(1, "O nome do projeto não pode ser vazio.")
+      .max(100, "O nome do projeto deve ter no máximo 100 caracteres."),
+    description: z
+      .string()
+      .trim()
+      .max(500, "A descrição deve ter no máximo 500 caracteres.")
+      .nullish()
+      .transform((val) => (val && val.length > 0 ? val : null)),
+    technologies: z
+      .string()
+      .trim()
+      .max(200, "As tecnologias devem ter no máximo 200 caracteres.")
+      .nullish()
+      .transform((val) => (val && val.length > 0 ? val : null)),
+    repository_url: z
+      .string()
+      .trim()
+      .url("A URL do repositório deve ser válida.")
+      .max(255, "A URL do repositório deve ter no máximo 255 caracteres.")
+      .nullish()
+      .or(z.literal(""))
+      .transform((val) => (val && val.length > 0 ? val : null)),
+    demo_url: z
+      .string()
+      .trim()
+      .url("A URL de demonstração deve ser válida.")
+      .max(255, "A URL de demonstração deve ter no máximo 255 caracteres.")
+      .nullish()
+      .or(z.literal(""))
+      .transform((val) => (val && val.length > 0 ? val : null)),
+  })
+  .strict();
+
+export const WithdrawApplicationSchema = z
+  .object({
+    applicationId: z
+      .string({ required_error: "Identificador da candidatura é obrigatório." })
+      .uuid("Identificador de candidatura inválido."),
+  })
+  .strict();
+
 export type CandidateProfileInput = z.infer<typeof CandidateProfileSchema>;
 export type ExperienceInput = z.infer<typeof ExperienceSchema>;
 export type EducationInput = z.infer<typeof EducationSchema>;
 export type CertificationInput = z.infer<typeof CertificationSchema>;
 export type LanguageInput = z.infer<typeof LanguageSchema>;
+export type ResumeUploadInput = z.infer<typeof ResumeUploadSchema>;
+export type SkillInput = z.infer<typeof SkillSchema>;
+export type ProjectInput = z.infer<typeof ProjectSchema>;
+export type WithdrawApplicationInput = z.infer<typeof WithdrawApplicationSchema>;

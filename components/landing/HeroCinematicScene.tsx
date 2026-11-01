@@ -15,10 +15,7 @@ export function HeroCinematicScene() {
 
     const matchMedia = window.matchMedia?.bind(window);
     const reduceMotion = matchMedia?.("(prefers-reduced-motion: reduce)");
-    const limitedDevice =
-      !matchMedia ||
-      reduceMotion?.matches === true ||
-      (navigator.hardwareConcurrency !== undefined && navigator.hardwareConcurrency <= 4);
+    const limitedDevice = !matchMedia || reduceMotion?.matches === true;
 
     if (limitedDevice) {
       scene.dataset.mode = "static";

@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // Mocks do Supabase Server Client e Next Cache
 const mockGetUser = vi.fn();
 const mockFrom = vi.fn();
+const mockRpc = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({
@@ -11,6 +12,7 @@ vi.mock("@/lib/supabase/server", () => ({
       getUser: mockGetUser,
     },
     from: mockFrom,
+    rpc: mockRpc,
   })),
 }));
 
@@ -458,5 +460,138 @@ describe("applyToJob — Fluxo de Candidatura e Regras de Segurança (RF29/RF31)
 
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe("ALREADY_APPLIED");
+  });
+});
+
+describe("withdrawApplication — Retirada de Candidatura pelo Candidato (RF29) via RPC", () => {
+  const validAppId = "22222222-2222-4222-8222-222222222222";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  it("1. Rejeita retirada se applicationId for inválido ou ausente", async () => {
+    const { withdrawApplication } = await import("@/lib/actions/applications");
+    const formData = new FormData();
+    formData.append("applicationId", "invalido");
+
+    const result = await withdrawApplication(formData);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("inválido");
+  });
+
+  it("2. Bloqueia retirada se usuário não estiver autenticado (camada TS)", async () => {
+    mockGetUser.mockResolvedValueOnce({ data: { user: null }, error: null });
+
+    const { withdrawApplication } = await import("@/lib/actions/applications");
+    const formData = new FormData();
+    formData.append("applicationId", validAppId);
+
+    const result = await withdrawApplication(formData);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("conectado");
+  });
+
+  it("3. Retorna erro quando a RPC falha com erro de infraestrutura", async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: "user-cand-1", email: "c@test.com" } },
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: "08006", message: "connection failure" },
+    });
+
+    const { withdrawApplication } = await import("@/lib/actions/applications");
+    const formData = new FormData();
+    formData.append("applicationId", validAppId);
+
+    const result = await withdrawApplication(formData);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Tente novamente");
+  });
+
+  it("4. Mapeia error_code FORBIDDEN da RPC corretamente", async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: "user-cand-1", email: "c@test.com" } },
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({
+      data: { success: false, error_code: "FORBIDDEN", error_message: "Forbidden by RPC" },
+      error: null,
+    });
+
+    const { withdrawApplication } = await import("@/lib/actions/applications");
+    const formData = new FormData();
+    formData.append("applicationId", validAppId);
+
+    const result = await withdrawApplication(formData);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("permissão");
+  });
+
+  it("5. Mapeia error_code ALREADY_WITHDRAWN da RPC corretamente", async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: "user-cand-1", email: "c@test.com" } },
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({
+      data: { success: false, error_code: "ALREADY_WITHDRAWN", error_message: "Already withdrawn" },
+      error: null,
+    });
+
+    const { withdrawApplication } = await import("@/lib/actions/applications");
+    const formData = new FormData();
+    formData.append("applicationId", validAppId);
+
+    const result = await withdrawApplication(formData);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("já foi retirada");
+  });
+
+  it("6. Mapeia error_code TERMINAL_STATE da RPC corretamente", async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: "user-cand-1", email: "c@test.com" } },
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({
+      data: { success: false, error_code: "TERMINAL_STATE", error_message: "Terminal" },
+      error: null,
+    });
+
+    const { withdrawApplication } = await import("@/lib/actions/applications");
+    const formData = new FormData();
+    formData.append("applicationId", validAppId);
+
+    const result = await withdrawApplication(formData);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("processo já encerrado ou finalizado");
+  });
+
+  it("7. Retorna sucesso quando RPC confirma retirada atômica", async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: "user-cand-1", email: "c@test.com" } },
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({
+      data: {
+        success: true,
+        application_id: validAppId,
+        previous_status: "INTERVIEW",
+        new_status: "WITHDRAWN",
+      },
+      error: null,
+    });
+
+    const { withdrawApplication } = await import("@/lib/actions/applications");
+    const formData = new FormData();
+    formData.append("applicationId", validAppId);
+
+    const result = await withdrawApplication(formData);
+    expect(result.success).toBe(true);
+    expect(mockRpc).toHaveBeenCalledWith("withdraw_application", {
+      _application_id: validAppId,
+    });
   });
 });

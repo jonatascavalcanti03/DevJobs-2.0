@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -9,9 +9,12 @@ import {
 } from "@/lib/validations/company/interview.schema";
 
 /**
- * Auxiliar para verificar se o usuário autenticado pertence à empresa da vaga associada à candidatura.
+ * Auxiliar para verificar se o usuário autenticado pertence à empresa e possui permissão de gestão.
  */
-async function getAuthorizedCompany(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function getAuthorizedCompany(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  explicitCompanyId?: string | null
+) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -35,13 +38,29 @@ async function getAuthorizedCompany(supabase: Awaited<ReturnType<typeof createCl
     };
   }
 
-  const { data: membership } = await supabase
+  let membershipQuery = supabase
     .from("company_members")
     .select("company_id, role")
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
+  if (explicitCompanyId) {
+    membershipQuery = membershipQuery.eq("company_id", explicitCompanyId);
+  }
+
+  const { data: memberships, error: memberError } = await membershipQuery;
+
+  if (memberError || !memberships || memberships.length === 0) {
+    return {
+      error: "Você não possui vínculo ativo com esta empresa.",
+      user,
+      companyId: null,
+      role: null,
+    };
+  }
+
+  const authorizedMembership = memberships.find((m) => ["OWNER", "ADMIN"].includes(m.role));
+
+  if (!authorizedMembership) {
     return {
       error: "Permissão insuficiente. Apenas administradores ou proprietários podem gerenciar entrevistas.",
       user,
@@ -50,7 +69,7 @@ async function getAuthorizedCompany(supabase: Awaited<ReturnType<typeof createCl
     };
   }
 
-  return { error: null, user, companyId: membership.company_id, role: membership.role };
+  return { error: null, user, companyId: authorizedMembership.company_id, role: authorizedMembership.role };
 }
 
 /**
@@ -58,7 +77,8 @@ async function getAuthorizedCompany(supabase: Awaited<ReturnType<typeof createCl
  */
 export async function scheduleInterview(formData: FormData) {
   const supabase = await createClient();
-  const authCheck = await getAuthorizedCompany(supabase);
+  const explicitCompanyId = formData.get("companyId") as string | null;
+  const authCheck = await getAuthorizedCompany(supabase, explicitCompanyId);
 
   if (authCheck.error || !authCheck.companyId || !authCheck.user) {
     return { error: authCheck.error || "Acesso negado." };
@@ -128,7 +148,8 @@ export async function scheduleInterview(formData: FormData) {
  */
 export async function updateInterviewStatus(formData: FormData) {
   const supabase = await createClient();
-  const authCheck = await getAuthorizedCompany(supabase);
+  const explicitCompanyId = formData.get("companyId") as string | null;
+  const authCheck = await getAuthorizedCompany(supabase, explicitCompanyId);
 
   if (authCheck.error || !authCheck.companyId) {
     return { error: authCheck.error || "Acesso negado." };
@@ -144,6 +165,27 @@ export async function updateInterviewStatus(formData: FormData) {
   }
 
   const { interviewId, status } = parsed.data;
+
+  // Confirmar que a entrevista pertence à empresa do usuário
+  const { data: interview } = await supabase
+    .from("interviews")
+    .select(`
+      id,
+      application_id,
+      applications!inner (
+        job_id,
+        jobs!inner (
+          company_id
+        )
+      )
+    `)
+    .eq("id", interviewId)
+    .eq("applications.jobs.company_id", authCheck.companyId)
+    .maybeSingle();
+
+  if (!interview) {
+    return { error: "Entrevista não encontrada ou não pertence a esta empresa." };
+  }
 
   // Atualizar entrevista
   const { error: updateError } = await supabase

@@ -2,14 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { JobCreateSchema, JobStatusUpdateSchema } from "@/lib/validations/company/job.schema";
+import {
+  JobCreateSchema,
+  JobStatusUpdateSchema,
+  JobUpdateSchema,
+} from "@/lib/validations/company/job.schema";
 import { CompanyProfileUpdateSchema } from "@/lib/validations/company/profile.schema";
 import { AdvanceApplicationStageSchema } from "@/lib/validations/company/pipeline.schema";
 
 /**
  * Auxiliar para obter a empresa associada ao usuário autenticado e verificar permissão de gestão.
+ * Suporta explicitCompanyId para usuários vinculados a múltiplas empresas, validando o vínculo no servidor.
  */
-async function getAuthorizedCompany(supabase: Awaited<ReturnType<typeof createClient>>) {
+async function getAuthorizedCompany(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  explicitCompanyId?: string | null
+) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -29,18 +37,35 @@ async function getAuthorizedCompany(supabase: Awaited<ReturnType<typeof createCl
     return { error: "Apenas contas corporativas podem gerenciar vagas e dados da empresa.", user, companyId: null, role: null };
   }
 
-  // Obter vínculo em company_members
-  const { data: membership } = await supabase
+  // Obter vínculo em company_members (suporta contexto explícito de company_id)
+  let membershipQuery = supabase
     .from("company_members")
     .select("company_id, role")
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
+  if (explicitCompanyId) {
+    membershipQuery = membershipQuery.eq("company_id", explicitCompanyId);
+  }
+
+  const { data: rawData, error: memberError } = await membershipQuery.maybeSingle?.() ?? await membershipQuery;
+
+  if (memberError) {
+    return { error: "Erro ao consultar vínculos empresariais.", user, companyId: null, role: null };
+  }
+
+  const memberships = Array.isArray(rawData) ? rawData : rawData ? [rawData] : [];
+
+  if (memberships.length === 0) {
+    return { error: "Você não possui vínculo ativo com esta empresa.", user, companyId: null, role: null };
+  }
+
+  const authorizedMembership = memberships.find((m: { role: string }) => ["OWNER", "ADMIN"].includes(m.role));
+
+  if (!authorizedMembership) {
     return { error: "Permissão insuficiente. Apenas proprietários ou administradores podem executar esta ação.", user, companyId: null, role: null };
   }
 
-  return { error: null, user, companyId: membership.company_id, role: membership.role };
+  return { error: null, user, companyId: authorizedMembership.company_id, role: authorizedMembership.role };
 }
 
 /**
@@ -48,7 +73,8 @@ async function getAuthorizedCompany(supabase: Awaited<ReturnType<typeof createCl
  */
 export async function createJob(formData: FormData) {
   const supabase = await createClient();
-  const authCheck = await getAuthorizedCompany(supabase);
+  const explicitCompanyId = formData.get("companyId") as string | null;
+  const authCheck = await getAuthorizedCompany(supabase, explicitCompanyId);
 
   if (authCheck.error || !authCheck.companyId) {
     return { error: authCheck.error || "Acesso negado." };
@@ -92,10 +118,15 @@ export async function createJob(formData: FormData) {
 
 /**
  * RF18: Edição de Vagas — Alternar Status (ACTIVE, PAUSED, CLOSED).
+ * Transições permitidas:
+ * - ACTIVE -> PAUSED, CLOSED
+ * - PAUSED -> ACTIVE, CLOSED
+ * - CLOSED -> Não pode ser reaberta sem autorização explícita (bloqueada para preservar histórico).
  */
 export async function updateJobStatus(formData: FormData) {
   const supabase = await createClient();
-  const authCheck = await getAuthorizedCompany(supabase);
+  const explicitCompanyId = formData.get("companyId") as string | null;
+  const authCheck = await getAuthorizedCompany(supabase, explicitCompanyId);
 
   if (authCheck.error || !authCheck.companyId) {
     return { error: authCheck.error || "Acesso negado." };
@@ -113,7 +144,7 @@ export async function updateJobStatus(formData: FormData) {
   // Confirmar que a vaga pertence à empresa do usuário
   const { data: job } = await supabase
     .from("jobs")
-    .select("id, company_id")
+    .select("id, status, company_id")
     .eq("id", parsed.data.jobId)
     .eq("company_id", authCheck.companyId)
     .maybeSingle();
@@ -122,13 +153,82 @@ export async function updateJobStatus(formData: FormData) {
     return { error: "Vaga não encontrada ou não pertence a esta empresa." };
   }
 
+  // Regra de integridade RF18: Vaga já CLOSED não pode ser alternada arbitrariamente
+  if (job.status === "CLOSED" && parsed.data.status !== "CLOSED") {
+    return { error: "Oportunidades encerradas não podem ser reabertas diretamente." };
+  }
+
   const { error: updateError } = await supabase
     .from("jobs")
     .update({ status: parsed.data.status })
-    .eq("id", parsed.data.jobId);
+    .eq("id", parsed.data.jobId)
+    .eq("company_id", authCheck.companyId);
 
   if (updateError) {
     return { error: "Erro ao atualizar status da oportunidade." };
+  }
+
+  revalidatePath("/dashboard/empresa");
+  revalidatePath(`/vagas/${parsed.data.jobId}`);
+  revalidatePath("/vagas");
+  return { success: true };
+}
+
+/**
+ * RF18: Edição de Conteúdo da Vaga (Título, Descrição, Modalidade, Nível, Localização).
+ */
+export async function updateJobContent(formData: FormData) {
+  const supabase = await createClient();
+  const explicitCompanyId = formData.get("companyId") as string | null;
+  const authCheck = await getAuthorizedCompany(supabase, explicitCompanyId);
+
+  if (authCheck.error || !authCheck.companyId) {
+    return { error: authCheck.error || "Acesso negado." };
+  }
+
+  const parsed = JobUpdateSchema.safeParse({
+    jobId: formData.get("jobId"),
+    title: formData.get("title"),
+    description: formData.get("description"),
+    location: formData.get("location"),
+    modality: formData.get("modality"),
+    level: formData.get("level"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || "Dados de vaga inválidos." };
+  }
+
+  // Confirmar propriedade
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, status, company_id")
+    .eq("id", parsed.data.jobId)
+    .eq("company_id", authCheck.companyId)
+    .maybeSingle();
+
+  if (!job) {
+    return { error: "Vaga não encontrada ou você não tem permissão para editá-la." };
+  }
+
+  if (job.status === "CLOSED") {
+    return { error: "Não é permitido alterar o conteúdo de uma oportunidade encerrada." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("jobs")
+    .update({
+      title: parsed.data.title,
+      description: parsed.data.description,
+      location: parsed.data.location,
+      modality: parsed.data.modality,
+      level: parsed.data.level,
+    })
+    .eq("id", parsed.data.jobId)
+    .eq("company_id", authCheck.companyId);
+
+  if (updateError) {
+    return { error: "Erro ao atualizar dados da oportunidade." };
   }
 
   revalidatePath("/dashboard/empresa");
@@ -142,7 +242,8 @@ export async function updateJobStatus(formData: FormData) {
  */
 export async function updateCompanyProfile(formData: FormData) {
   const supabase = await createClient();
-  const authCheck = await getAuthorizedCompany(supabase);
+  const explicitCompanyId = formData.get("companyId") as string | null;
+  const authCheck = await getAuthorizedCompany(supabase, explicitCompanyId);
 
   if (authCheck.error || !authCheck.companyId) {
     return { error: authCheck.error || "Acesso negado." };
