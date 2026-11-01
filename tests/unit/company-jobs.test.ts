@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { JobCreateSchema, JobStatusUpdateSchema } from "@/lib/validations/company/job.schema";
+import {
+  JobCreateSchema,
+  JobStatusUpdateSchema,
+  JobUpdateSchema,
+} from "@/lib/validations/company/job.schema";
 import { CompanyProfileUpdateSchema } from "@/lib/validations/company/profile.schema";
 
 describe("Job & Company Profile Schemas — Regras de Domínio (RF15, RF17, RF18)", () => {
@@ -64,5 +68,30 @@ describe("Job & Company Profile Schemas — Regras de Domínio (RF15, RF17, RF18
       expect(result.data.trading_name).toBe("Tech Inovações");
       expect(result.data.website).toBe("https://techinovacoes.com.br");
     }
+  });
+
+  it("valida atualização de conteúdo da vaga (JobUpdateSchema)", () => {
+    const validEdit = {
+      jobId: "11111111-2222-4333-8444-555555555555",
+      title: "Tech Lead TypeScript Full Stack",
+      description: "Liderança de equipe técnica e arquitetura de microsserviços.",
+      modality: "REMOTE",
+      level: "LEAD",
+      location: "São Paulo, SP",
+    };
+
+    const result = JobUpdateSchema.safeParse(validEdit);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejeita atualização de conteúdo com descrição curta", () => {
+    const invalidEdit = {
+      jobId: "11111111-2222-4333-8444-555555555555",
+      title: "Tech Lead",
+      description: "Pequena",
+    };
+
+    const result = JobUpdateSchema.safeParse(invalidEdit);
+    expect(result.success).toBe(false);
   });
 });

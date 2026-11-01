@@ -39,7 +39,7 @@ export default async function DashboardLayout({
           
           <div className="dashboard-user-info">
             <span className="dashboard-role-badge">
-              {role === "COMPANY" ? "Empresa" : "Candidato"}
+              {role === "COMPANY" ? "Empresa" : role === "ADMIN" ? "Administração" : "Candidato"}
             </span>
             <span className="dashboard-email">{user.email}</span>
             <form action={logout}>

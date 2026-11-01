@@ -10,6 +10,10 @@ import {
   removeCertification,
   addLanguage,
   removeLanguage,
+  addSkill,
+  removeSkill,
+  addProject,
+  removeProject,
 } from "@/lib/actions/candidate-profile";
 
 interface SubcomponentsProps {
@@ -41,6 +45,16 @@ interface SubcomponentsProps {
     language_name: string;
     proficiency_level: string;
   }>;
+  skills?: Array<{
+    id: string;
+    name: string;
+  }>;
+  projects?: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    url: string | null;
+  }>;
 }
 
 export function CandidateSubcomponents({
@@ -48,14 +62,19 @@ export function CandidateSubcomponents({
   educations,
   certifications,
   languages,
+  skills = [],
+  projects = [],
 }: SubcomponentsProps) {
-  const [activeTab, setActiveTab] = useState<"exp" | "edu" | "cert" | "lang">("exp");
+  const [activeTab, setActiveTab] = useState<"exp" | "edu" | "cert" | "lang" | "skills" | "proj">("skills");
   const [showAddExp, setShowAddExp] = useState(false);
   const [showAddEdu, setShowAddEdu] = useState(false);
   const [showAddCert, setShowAddCert] = useState(false);
   const [showAddLang, setShowAddLang] = useState(false);
+  const [showAddSkill, setShowAddSkill] = useState(false);
+  const [showAddProj, setShowAddProj] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const handleAddExp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -149,16 +168,88 @@ export function CandidateSubcomponents({
     setIsPending(false);
   };
 
+  const handleAddSkill = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsPending(true);
+    setError(null);
+    setSuccess(null);
+    const form = e.currentTarget;
+    const res = await addSkill(new FormData(form));
+    if (res?.error) setError(res.error);
+    else {
+      form.reset();
+      setShowAddSkill(false);
+      setSuccess("Competência adicionada com sucesso!");
+    }
+    setIsPending(false);
+  };
+
+  const handleRemoveSkill = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsPending(true);
+    setError(null);
+    setSuccess(null);
+    const res = await removeSkill(new FormData(e.currentTarget));
+    if (res?.error) setError(res.error);
+    else setSuccess("Competência removida com sucesso!");
+    setIsPending(false);
+  };
+
+  const handleAddProj = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsPending(true);
+    setError(null);
+    setSuccess(null);
+    const form = e.currentTarget;
+    const res = await addProject(new FormData(form));
+    if (res?.error) setError(res.error);
+    else {
+      form.reset();
+      setShowAddProj(false);
+      setSuccess("Projeto adicionado ao portfólio!");
+    }
+    setIsPending(false);
+  };
+
+  const handleRemoveProj = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsPending(true);
+    setError(null);
+    setSuccess(null);
+    const res = await removeProject(new FormData(e.currentTarget));
+    if (res?.error) setError(res.error);
+    else setSuccess("Projeto removido!");
+    setIsPending(false);
+  };
+
   return (
     <div className="candidate-subcomponents" style={{ marginTop: "var(--space-6)" }}>
       {/* Abas dos Subcomponentes (RF06) */}
-      <div className="role-selector" role="tablist" style={{ marginBottom: "var(--space-4)" }}>
+      <div className="role-selector" role="tablist" style={{ marginBottom: "var(--space-4)", flexWrap: "wrap", gap: "var(--space-2)" }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "skills"}
+          className={`role-btn ${activeTab === "skills" ? "active" : ""}`}
+          onClick={() => { setActiveTab("skills"); setError(null); setSuccess(null); }}
+        >
+          Competências ({skills.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "proj"}
+          className={`role-btn ${activeTab === "proj" ? "active" : ""}`}
+          onClick={() => { setActiveTab("proj"); setError(null); setSuccess(null); }}
+        >
+          Projetos ({projects.length})
+        </button>
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === "exp"}
           className={`role-btn ${activeTab === "exp" ? "active" : ""}`}
-          onClick={() => { setActiveTab("exp"); setError(null); }}
+          onClick={() => { setActiveTab("exp"); setError(null); setSuccess(null); }}
         >
           Experiências ({experiences.length})
         </button>
@@ -167,7 +258,7 @@ export function CandidateSubcomponents({
           role="tab"
           aria-selected={activeTab === "edu"}
           className={`role-btn ${activeTab === "edu" ? "active" : ""}`}
-          onClick={() => { setActiveTab("edu"); setError(null); }}
+          onClick={() => { setActiveTab("edu"); setError(null); setSuccess(null); }}
         >
           Formação ({educations.length})
         </button>
@@ -176,7 +267,7 @@ export function CandidateSubcomponents({
           role="tab"
           aria-selected={activeTab === "cert"}
           className={`role-btn ${activeTab === "cert" ? "active" : ""}`}
-          onClick={() => { setActiveTab("cert"); setError(null); }}
+          onClick={() => { setActiveTab("cert"); setError(null); setSuccess(null); }}
         >
           Certificações ({certifications.length})
         </button>
@@ -185,7 +276,7 @@ export function CandidateSubcomponents({
           role="tab"
           aria-selected={activeTab === "lang"}
           className={`role-btn ${activeTab === "lang" ? "active" : ""}`}
-          onClick={() => { setActiveTab("lang"); setError(null); }}
+          onClick={() => { setActiveTab("lang"); setError(null); setSuccess(null); }}
         >
           Idiomas ({languages.length})
         </button>
@@ -194,6 +285,12 @@ export function CandidateSubcomponents({
       {error && (
         <div role="alert" className="auth-error" style={{ marginBottom: "var(--space-3)" }}>
           {error}
+        </div>
+      )}
+
+      {success && (
+        <div role="status" className="apply-success-box" style={{ marginBottom: "var(--space-3)" }}>
+          {success}
         </div>
       )}
 
@@ -448,6 +545,175 @@ export function CandidateSubcomponents({
             ))}
             {languages.length === 0 && !showAddLang && (
               <div style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem", padding: "var(--space-3)", textAlign: "center" }}>Nenhum idioma registrado.</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABA 5: COMPETÊNCIAS (RF06) */}
+      {activeTab === "skills" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-3)" }}>
+            <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>Competências técnicas e habilidades</span>
+            <button
+              type="button"
+              onClick={() => setShowAddSkill(!showAddSkill)}
+              className="btn btn-secondary btn-sm"
+              style={{ padding: "4px 10px", fontSize: "0.8125rem" }}
+            >
+              {showAddSkill ? "Cancelar" : "+ Nova Competência"}
+            </button>
+          </div>
+
+          {showAddSkill && (
+            <form onSubmit={handleAddSkill} className="auth-form" style={{ background: "rgba(15, 29, 69, 0.7)", padding: "var(--space-4)", borderRadius: "var(--radius-control)", marginBottom: "var(--space-4)" }}>
+              <div className="form-group">
+                <label htmlFor="skill-name">Nome da Competência</label>
+                <input id="skill-name" name="name" required maxLength={50} placeholder="Ex.: React, PostgreSQL, Docker, TypeScript" className="form-input" />
+              </div>
+              <button type="submit" disabled={isPending} className="btn btn-primary btn-sm">
+                {isPending ? "Salvando..." : "Salvar Competência"}
+              </button>
+            </form>
+          )}
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+            {skills.map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  background: "rgba(15, 29, 69, 0.8)",
+                  border: "1px solid var(--color-border-medium)",
+                  borderRadius: "9999px",
+                  padding: "4px 12px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "var(--space-2)",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                <span>{s.name}</span>
+                <form onSubmit={handleRemoveSkill} style={{ display: "inline" }}>
+                  <input type="hidden" name="skillId" value={s.id} />
+                  <button
+                    type="submit"
+                    disabled={isPending}
+                    aria-label={`Remover ${s.name}`}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#F87171",
+                      cursor: "pointer",
+                      fontSize: "0.875rem",
+                      padding: 0,
+                      lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                </form>
+              </div>
+            ))}
+            {skills.length === 0 && !showAddSkill && (
+              <div style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem", padding: "var(--space-3)", textAlign: "center", width: "100%" }}>
+                Nenhuma competência adicionada ao perfil até o momento.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABA 6: PROJETOS PROFISSIONAIS (RF06) */}
+      {activeTab === "proj" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-3)" }}>
+            <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>Projetos e portfólio técnico</span>
+            <button
+              type="button"
+              onClick={() => setShowAddProj(!showAddProj)}
+              className="btn btn-secondary btn-sm"
+              style={{ padding: "4px 10px", fontSize: "0.8125rem" }}
+            >
+              {showAddProj ? "Cancelar" : "+ Novo Projeto"}
+            </button>
+          </div>
+
+          {showAddProj && (
+            <form onSubmit={handleAddProj} className="auth-form" style={{ background: "rgba(15, 29, 69, 0.7)", padding: "var(--space-4)", borderRadius: "var(--radius-control)", marginBottom: "var(--space-4)" }}>
+              <div className="form-group">
+                <label htmlFor="proj-name">Nome do Projeto</label>
+                <input id="proj-name" name="name" required maxLength={100} placeholder="Ex.: Plataforma E-commerce, Chatbot AI" className="form-input" />
+              </div>
+              <div className="form-group">
+                <label htmlFor="proj-tech">Tecnologias Utilizadas</label>
+                <input id="proj-tech" name="technologies" maxLength={200} placeholder="Ex.: Next.js, Node.js, PostgreSQL, Tailwind" className="form-input" />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+                <div className="form-group">
+                  <label htmlFor="proj-repo">URL do Repositório (Opcional)</label>
+                  <input id="proj-repo" name="repository_url" type="url" maxLength={255} placeholder="https://github.com/..." className="form-input" />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="proj-demo">URL de Demonstração (Opcional)</label>
+                  <input id="proj-demo" name="demo_url" type="url" maxLength={255} placeholder="https://meuprojeto.com" className="form-input" />
+                </div>
+              </div>
+              <div className="form-group">
+                <label htmlFor="proj-desc">Descrição</label>
+                <textarea id="proj-desc" name="description" rows={3} maxLength={500} placeholder="Descreva os objetivos, sua contribuição e arquitetura" className="form-input" />
+              </div>
+              <button type="submit" disabled={isPending} className="btn btn-primary btn-sm">
+                {isPending ? "Salvando..." : "Salvar Projeto"}
+              </button>
+            </form>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+            {projects.map((p) => (
+              <div
+                key={p.id}
+                style={{
+                  background: "rgba(7, 18, 46, 0.4)",
+                  border: "1px solid var(--color-border-subtle)",
+                  borderRadius: "var(--radius-control)",
+                  padding: "var(--space-3)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: "var(--space-3)",
+                }}
+              >
+                <div>
+                  <h4 style={{ fontSize: "0.9375rem", color: "var(--color-text-primary)", margin: 0 }}>{p.name}</h4>
+                  {p.description && (
+                    <p style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", margin: "var(--space-1) 0", whiteSpace: "pre-line" }}>
+                      {p.description}
+                    </p>
+                  )}
+                  {p.url && (
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: "0.75rem", color: "var(--color-electric-blue)", textDecoration: "underline", display: "inline-block", marginTop: "var(--space-1)" }}
+                    >
+                      🔗 Acessar projeto
+                    </a>
+                  )}
+                </div>
+                <form onSubmit={handleRemoveProj}>
+                  <input type="hidden" name="id" value={p.id} />
+                  <button type="submit" disabled={isPending} className="btn btn-ghost btn-sm" style={{ color: "#F87171", padding: "2px 6px", fontSize: "0.75rem" }}>
+                    Excluir
+                  </button>
+                </form>
+              </div>
+            ))}
+            {projects.length === 0 && !showAddProj && (
+              <div style={{ color: "var(--color-text-muted)", fontSize: "0.8125rem", padding: "var(--space-3)", textAlign: "center" }}>
+                Nenhum projeto cadastrado no portfólio.
+              </div>
             )}
           </div>
         </div>
