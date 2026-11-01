@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/landing/Header";
 import { CtaFooterSection } from "@/components/landing/CtaFooterSection";
 import { JobFilters } from "@/components/jobs/JobFilters";
+import { PremiumJobCard, JobCardData } from "@/components/jobs/PremiumJobCard";
+import { calculateJobMatch } from "@/lib/matching/engine";
+import { CandidateMatchingInput, MatchEvaluationResult } from "@/lib/matching/types";
 
 export const metadata = {
   title: "Catálogo de Vagas | TechLink",
@@ -21,34 +24,16 @@ interface VagasIndexPageProps {
 export default async function VagasIndexPage({ searchParams }: VagasIndexPageProps) {
   const { q, modality, level, location } = await searchParams;
 
-  let jobs: Array<{
-    id: string;
-    title: string;
-    description: string;
-    status: string;
-    location: string | null;
-    modality: string | null;
-    level: string | null;
-    created_at: string;
-    company_profiles:
-      | {
-          trading_name: string | null;
-          company_name: string;
-        }
-      | {
-          trading_name: string | null;
-          company_name: string;
-        }[]
-      | null;
-  }> = [];
-
+  let jobsData: JobCardData[] = [];
   let fetchError: string | null = null;
   let currentUser: { email: string | null; role: string | null } | null = null;
+  let candidateData: CandidateMatchingInput | null = null;
+  const matchResultsMap = new Map<string, MatchEvaluationResult>();
 
   try {
     const supabase = await createClient();
 
-    // Obter sessão atual de forma segura
+    // 1. Obter sessão atual de forma segura
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -60,13 +45,61 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
         .eq("id", user.id)
         .maybeSingle();
 
+      const role = userData?.role ?? null;
       currentUser = {
         email: user.email ?? null,
-        role: userData?.role ?? null,
+        role,
       };
+
+      // Se for candidato, carregar dados para matching determinístico
+      if (role === "CANDIDATE") {
+        const { data: candidateProfile } = await supabase
+          .from("candidate_profiles")
+          .select("id, headline, location")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (candidateProfile) {
+          // Carregar competências do candidato
+          const { data: skillsData } = await supabase
+            .from("candidate_skills")
+            .select(`
+              skill_id,
+              skills (
+                id,
+                name
+              )
+            `)
+            .eq("candidate_id", candidateProfile.id);
+
+          const skills = (skillsData || [])
+            .map((item) => {
+              const s = Array.isArray(item.skills) ? item.skills[0] : item.skills;
+              return s?.name;
+            })
+            .filter((name): name is string => typeof name === "string" && name.length > 0);
+
+          // Carregar experiências para inferência de senioridade caso necessário
+          const { data: expData } = await supabase
+            .from("experiences")
+            .select("title, start_date, end_date")
+            .eq("candidate_id", candidateProfile.id);
+
+          candidateData = {
+            skills,
+            location: candidateProfile.location,
+            headline: candidateProfile.headline,
+            experiences: (expData || []).map((exp) => ({
+              title: exp.title,
+              start_date: exp.start_date,
+              end_date: exp.end_date,
+            })),
+          };
+        }
+      }
     }
 
-    // Consulta de vagas ativas com suporte aos filtros (RF20 e RF21)
+    // 2. Consulta de vagas ativas com suporte aos filtros (RF20 e RF21)
     let query = supabase
       .from("jobs")
       .select(`
@@ -81,6 +114,11 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
         company_profiles (
           company_name,
           trading_name
+        ),
+        job_skills (
+          skills (
+            name
+          )
         )
       `)
       .eq("status", "ACTIVE");
@@ -113,13 +151,59 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
     if (error) {
       fetchError = error.message;
     } else if (data) {
-      jobs = data as unknown as typeof jobs;
+      jobsData = data.map((rawJob) => {
+        const companyProfile = Array.isArray(rawJob.company_profiles)
+          ? rawJob.company_profiles[0]
+          : rawJob.company_profiles;
+        const companyName =
+          companyProfile?.trading_name || companyProfile?.company_name || "Empresa Confidencial";
+
+        const skills = (rawJob.job_skills || [])
+          .map((js: { skills: { name: string } | { name: string }[] | null }) => {
+            const s = Array.isArray(js.skills) ? js.skills[0] : js.skills;
+            return s?.name;
+          })
+          .filter((name): name is string => typeof name === "string" && name.length > 0);
+
+        return {
+          id: rawJob.id,
+          title: rawJob.title,
+          description: rawJob.description,
+          status: rawJob.status,
+          location: rawJob.location,
+          modality: rawJob.modality,
+          level: rawJob.level,
+          created_at: rawJob.created_at,
+          companyName,
+          skills,
+        };
+      });
+
+      // 3. Execução do matching determinístico para candidato autenticado
+      if (candidateData) {
+        for (const job of jobsData) {
+          const matchResult = calculateJobMatch(candidateData, {
+            id: job.id,
+            title: job.title,
+            description: job.description,
+            skills: job.skills,
+            level: job.level,
+            modality: job.modality,
+            location: job.location,
+          });
+          matchResultsMap.set(job.id, matchResult);
+        }
+      }
     }
   } catch (err: unknown) {
     fetchError = err instanceof Error ? err.message : "Erro ao carregar vagas.";
   }
 
-  const hasFiltersApplied = Boolean(q || (modality && modality !== "ALL") || (level && level !== "ALL") || location);
+  const hasFiltersApplied = Boolean(
+    q || (modality && modality !== "ALL") || (level && level !== "ALL") || location
+  );
+
+  const isCandidate = currentUser?.role === "CANDIDATE";
 
   return (
     <>
@@ -137,7 +221,7 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
           </header>
 
           {/* Barra de Busca e Filtros (RF20 e RF21) */}
-          <JobFilters totalCount={jobs.length} />
+          <JobFilters totalCount={jobsData.length} />
 
           {fetchError && (
             <div className="vagas-error-notice" role="alert">
@@ -145,9 +229,12 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
             </div>
           )}
 
-          {!fetchError && jobs.length === 0 && (
+          {!fetchError && jobsData.length === 0 && (
             <div className="vagas-empty-container">
-              <div className="dashboard-empty-state" style={{ minHeight: "180px", flexDirection: "column", gap: "1rem" }}>
+              <div
+                className="dashboard-empty-state"
+                style={{ minHeight: "180px", flexDirection: "column", gap: "1rem" }}
+              >
                 <p>
                   {hasFiltersApplied
                     ? "Nenhuma vaga encontrada para os filtros selecionados."
@@ -162,52 +249,16 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
             </div>
           )}
 
-          {!fetchError && jobs.length > 0 && (
+          {!fetchError && jobsData.length > 0 && (
             <div className="vagas-grid" role="list">
-              {jobs.map((job) => {
-                const companyProfile = Array.isArray(job.company_profiles)
-                  ? job.company_profiles[0]
-                  : job.company_profiles;
-                const companyName = companyProfile?.trading_name || companyProfile?.company_name || "Empresa Confidencial";
-
-                return (
-                  <article key={job.id} className="job-card" role="listitem">
-                    <div className="job-card-top">
-                      <div className="job-card-badges">
-                        <span className="job-badge-recent">Aberta</span>
-                        {job.modality && <span className="job-meta-tag">{job.modality}</span>}
-                        {job.level && <span className="job-meta-tag">{job.level}</span>}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h2 className="job-title">{job.title}</h2>
-                      <p className="job-company">{companyName}</p>
-
-                      <div className="job-meta-list">
-                        {job.location && (
-                          <span className="job-meta-item">
-                            📍 {job.location}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="job-card-bottom">
-                      <span className="job-date">
-                        {new Date(job.created_at).toLocaleDateString("pt-BR")}
-                      </span>
-                      <Link
-                        href={`/vagas/${job.id}`}
-                        className="job-view-link"
-                        aria-label={`Ver detalhes da vaga ${job.title}`}
-                      >
-                        Ver detalhes →
-                      </Link>
-                    </div>
-                  </article>
-                );
-              })}
+              {jobsData.map((job) => (
+                <PremiumJobCard
+                  key={job.id}
+                  job={job}
+                  isCandidate={isCandidate}
+                  matchResult={matchResultsMap.get(job.id) || null}
+                />
+              ))}
             </div>
           )}
         </div>

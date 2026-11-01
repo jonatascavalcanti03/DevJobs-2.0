@@ -13,9 +13,7 @@ export function HowItWorksCinematicScene() {
 
     const matchMedia = window.matchMedia?.bind(window);
     const limitedDevice =
-      !matchMedia ||
-      matchMedia("(prefers-reduced-motion: reduce)").matches ||
-      (navigator.hardwareConcurrency !== undefined && navigator.hardwareConcurrency <= 4);
+      !matchMedia || matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (limitedDevice) {
       scene.dataset.mode = "static";
