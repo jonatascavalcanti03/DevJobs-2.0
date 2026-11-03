@@ -8,7 +8,10 @@ import { login } from "@/lib/actions/auth";
 function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/dashboard";
-  
+  const registered = searchParams.get("registered") === "1";
+  const reset = searchParams.get("reset") === "1";
+  const accountError = searchParams.get("error") === "account";
+
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
@@ -16,10 +19,10 @@ function LoginForm() {
     e.preventDefault();
     setIsPending(true);
     setError(null);
-    
+
     const formData = new FormData(e.currentTarget);
     const result = await login(formData);
-    
+
     if (result?.error) {
       setError(result.error);
       setIsPending(false);
@@ -30,14 +33,32 @@ function LoginForm() {
     <>
       <form onSubmit={handleSubmit} className="auth-form">
         <input type="hidden" name="redirectTo" value={redirectTo} />
-        
+
+        {registered && !error && (
+          <div className="alert-success-box" role="status">
+            Conta criada com sucesso! Faça login para continuar.
+          </div>
+        )}
+
+        {reset && !error && (
+          <div className="alert-success-box" role="status">
+            Senha redefinida com sucesso! Faça login com sua nova credencial.
+          </div>
+        )}
+
+        {accountError && !error && (
+          <div className="auth-error" role="alert">
+            Perfil de usuário não localizado. Contate o suporte.
+          </div>
+        )}
+
         <div className="form-group">
           <label htmlFor="email">E-mail</label>
-          <input 
-            type="email" 
-            id="email" 
-            name="email" 
-            required 
+          <input
+            type="email"
+            id="email"
+            name="email"
+            required
             placeholder="seu@email.com"
             className="form-input"
           />
@@ -50,11 +71,11 @@ function LoginForm() {
               Esqueceu a senha?
             </Link>
           </div>
-          <input 
-            type="password" 
-            id="password" 
-            name="password" 
-            required 
+          <input
+            type="password"
+            id="password"
+            name="password"
+            required
             placeholder="••••••••"
             className="form-input"
           />
@@ -66,9 +87,9 @@ function LoginForm() {
           </div>
         )}
 
-        <button 
-          type="submit" 
-          className="btn btn-primary auth-submit" 
+        <button
+          type="submit"
+          className="btn btn-primary auth-submit"
           disabled={isPending}
         >
           {isPending ? "Entrando..." : "Entrar"}
@@ -107,4 +128,3 @@ export default function LoginPage() {
     </main>
   );
 }
-

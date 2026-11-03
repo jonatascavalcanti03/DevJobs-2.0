@@ -42,7 +42,7 @@ export function HeroSection() {
 
           {/* Chamadas de Ação (CTAs) */}
           <div className="hero-ctas">
-            <Link href="#vagas" className="btn btn-primary" id="hero-cta-explore">
+            <Link href="/vagas" className="btn btn-primary" id="hero-cta-explore">
               Explorar vagas
               <svg
                 width="18"
@@ -60,7 +60,7 @@ export function HeroSection() {
               </svg>
             </Link>
 
-            <Link href="#beneficios-empresas" className="btn btn-secondary" id="hero-cta-company">
+            <Link href="/empresas" className="btn btn-secondary" id="hero-cta-company">
               Sou uma empresa
             </Link>
           </div>

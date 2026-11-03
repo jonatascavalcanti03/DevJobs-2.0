@@ -15,6 +15,9 @@ export interface JobCardData {
   created_at: string;
   companyName: string;
   skills: string[];
+  isExternal?: boolean;
+  externalUrl?: string | null;
+  source?: string | null;
 }
 
 export interface PremiumJobCardProps {
@@ -28,7 +31,7 @@ export function PremiumJobCard({
   matchResult,
   isCandidate = false,
 }: PremiumJobCardProps) {
-  const isMatchCalculated = Boolean(isCandidate && matchResult);
+  const isMatchCalculated = Boolean(isCandidate && matchResult && !job.isExternal);
   const matchedSkillsSet = new Set(
     (matchResult?.matchedSkills || []).map((s) => s.toLowerCase())
   );
@@ -42,7 +45,11 @@ export function PremiumJobCard({
     >
       <div className="job-card-top">
         <div className="job-card-badges">
-          {job.status === "ACTIVE" ? (
+          {job.isExternal ? (
+            <Badge variant="accent" size="sm">
+              Externa ({job.source || "Adzuna"})
+            </Badge>
+          ) : job.status === "ACTIVE" ? (
             <Badge variant="success" size="sm" dot>
               Aberta
             </Badge>
@@ -65,7 +72,7 @@ export function PremiumJobCard({
           )}
         </div>
 
-        {isCandidate && (
+        {isCandidate && !job.isExternal && (
           <div
             className="job-card-match-preview"
             data-testid="card-match-meter"
@@ -86,9 +93,20 @@ export function PremiumJobCard({
 
       <div className="job-card-main-content">
         <h2 id={`job-title-${job.id}`} className="job-title">
-          <Link href={`/vagas/${job.id}`} className="job-title-link">
-            {job.title}
-          </Link>
+          {job.isExternal && job.externalUrl ? (
+            <a
+              href={job.externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="job-title-link"
+            >
+              {job.title} <span aria-hidden="true">↗</span>
+            </a>
+          ) : (
+            <Link href={`/vagas/${job.id}`} className="job-title-link">
+              {job.title}
+            </Link>
+          )}
         </h2>
         <p className="job-company">{job.companyName}</p>
 
@@ -137,8 +155,8 @@ export function PremiumJobCard({
           </div>
         )}
 
-        {/* Resumo consultivo de matching (se candidato) */}
-        {isCandidate && matchResult && (
+        {/* Resumo consultivo de matching (se candidato e vaga interna) */}
+        {isCandidate && !job.isExternal && matchResult && (
           <div className="job-card-match-banner" data-testid="card-match-banner">
             {matchResult.dataSufficiency === "INSUFFICIENT" ? (
               <p className="match-banner-hint">
@@ -163,15 +181,26 @@ export function PremiumJobCard({
         <span className="job-date">
           {new Date(job.created_at).toLocaleDateString("pt-BR")}
         </span>
-        <Link
-          href={`/vagas/${job.id}`}
-          className="job-view-link"
-          aria-label={`Ver detalhes da vaga ${job.title}`}
-        >
-          Ver detalhes →
-        </Link>
+        {job.isExternal && job.externalUrl ? (
+          <a
+            href={job.externalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="job-view-link"
+            aria-label={`Acessar vaga externa ${job.title} na plataforma parceira`}
+          >
+            Acessar no parceiro ↗
+          </a>
+        ) : (
+          <Link
+            href={`/vagas/${job.id}`}
+            className="job-view-link"
+            aria-label={`Ver detalhes da vaga ${job.title}`}
+          >
+            Ver detalhes →
+          </Link>
+        )}
       </div>
     </article>
   );
 }
-

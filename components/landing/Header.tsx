@@ -1,5 +1,7 @@
 "use client";
 
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 
@@ -85,6 +87,7 @@ export function Header({ user }: HeaderProps = {}) {
 
         {/* Ações Desktop */}
         <div className="header-actions">
+          <ThemeToggle />
           <Link href="/vagas" className="btn btn-primary" style={{ padding: "0.55rem 1.15rem", fontSize: "0.875rem" }}>
             Explorar vagas
           </Link>
@@ -209,6 +212,9 @@ export function Header({ user }: HeaderProps = {}) {
           </Link>
         </nav>
 
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: "var(--space-4)" }}>
+          <ThemeToggle />
+        </div>
         <div className="mobile-drawer-actions">
           <Link href="/vagas" className="btn btn-primary" onClick={closeMobileMenu}>
             Explorar vagas

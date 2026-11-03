@@ -29,6 +29,12 @@ export async function login(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
+    if (error.message?.toLowerCase().includes("email not confirmed")) {
+      return {
+        error:
+          "E-mail pendente de confirmação. Para a apresentação acadêmica, desative 'Confirm email' nas configurações do Supabase Auth.",
+      };
+    }
     return { error: "Não foi possível entrar com estas credenciais." };
   }
 
@@ -50,7 +56,10 @@ export async function register(formData: FormData) {
   const { data, error } = await supabase.auth.signUp(parsed.data);
 
   if (error || !data.user) {
-    return { error: "Não foi possível criar sua conta. Tente novamente." };
+    if (error?.message?.toLowerCase().includes("already registered")) {
+      return { error: "Este e-mail já está em uso no sistema." };
+    }
+    return { error: error?.message || "Não foi possível criar sua conta. Tente novamente." };
   }
 
   revalidatePath("/", "layout");

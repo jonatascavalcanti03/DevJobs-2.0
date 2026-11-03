@@ -31,11 +31,8 @@ describe("Landing Page — Componentes Visuais e Acessibilidade", () => {
     render(<HeroSection />);
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
     expect(screen.getByText(/conectando talentos tech/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /explorar vagas/i })).toHaveAttribute("href", "#vagas");
-    expect(screen.getByRole("link", { name: /sou uma empresa/i })).toHaveAttribute(
-      "href",
-      "#beneficios-empresas"
-    );
+    expect(screen.getByRole("link", { name: /explorar vagas/i })).toHaveAttribute("href", "/vagas");
+    expect(screen.getByRole("link", { name: /sou uma empresa/i })).toHaveAttribute("href", "/empresas");
     expect(document.querySelector(".hero-cinematic-scene")).toHaveAttribute("aria-hidden", "true");
   });
 

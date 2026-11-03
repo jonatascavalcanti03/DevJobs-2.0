@@ -6,6 +6,7 @@ import { JobFilters } from "@/components/jobs/JobFilters";
 import { PremiumJobCard, JobCardData } from "@/components/jobs/PremiumJobCard";
 import { calculateJobMatch } from "@/lib/matching/engine";
 import { CandidateMatchingInput, MatchEvaluationResult } from "@/lib/matching/types";
+import { fetchExternalJobs } from "@/lib/jobs/external-adzuna";
 
 export const metadata = {
   title: "Catálogo de Vagas | TechLink",
@@ -193,6 +194,19 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
           });
           matchResultsMap.set(job.id, matchResult);
         }
+      }
+
+      // 4. Integração com API externa (Adzuna) se credenciais configuradas
+      try {
+        const externalResult = await fetchExternalJobs({
+          query: q,
+          location,
+        });
+        if (externalResult.available && externalResult.jobs.length > 0) {
+          jobsData = [...jobsData, ...externalResult.jobs];
+        }
+      } catch {
+        // Falha na API externa nunca derruba o catálogo interno institucional
       }
     }
   } catch (err: unknown) {

@@ -1,3 +1,4 @@
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -38,6 +39,7 @@ export default async function DashboardLayout({
           </Link>
           
           <div className="dashboard-user-info">
+            <ThemeToggle />
             <span className="dashboard-role-badge">
               {role === "COMPANY" ? "Empresa" : role === "ADMIN" ? "Administração" : "Candidato"}
             </span>

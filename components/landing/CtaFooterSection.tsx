@@ -19,14 +19,14 @@ export function CtaFooterSection() {
               vagas para alcançar desenvolvedores qualificados.
             </p>
             <div className="cta-buttons">
-              <Link href="#vagas" className="btn btn-primary" style={{ padding: "0.85rem 2rem", fontSize: "1rem" }}>
+              <Link href="/vagas" className="btn btn-primary" style={{ padding: "0.85rem 2rem", fontSize: "1rem" }}>
                 Explorar vagas agora
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="5" y1="12" x2="19" y2="12" />
                   <polyline points="12 5 19 12 12 19" />
                 </svg>
               </Link>
-              <Link href="#beneficios-empresas" className="btn btn-secondary" style={{ padding: "0.85rem 2rem", fontSize: "1rem" }}>
+              <Link href="/empresas" className="btn btn-secondary" style={{ padding: "0.85rem 2rem", fontSize: "1rem" }}>
                 Sou uma empresa
               </Link>
             </div>

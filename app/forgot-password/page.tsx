@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -37,6 +37,22 @@ export default function ForgotPasswordPage() {
           <p className="auth-subtitle">
             Informe seu e-mail cadastrado e enviaremos instruções com token de uso único para redefinição.
           </p>
+        </div>
+
+        <div
+          role="note"
+          style={{
+            background: "rgba(59, 130, 246, 0.08)",
+            border: "1px solid rgba(59, 130, 246, 0.2)",
+            borderRadius: "var(--radius-md)",
+            padding: "var(--space-3) var(--space-4)",
+            marginBottom: "var(--space-4)",
+            fontSize: "0.8125rem",
+            color: "var(--color-text-secondary)",
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ color: "var(--color-text-primary)" }}>Ambiente de Demonstração:</strong> O serviço de envio de e-mails via SMTP está desativado para a apresentação acadêmica.
         </div>
 
         {success ? (

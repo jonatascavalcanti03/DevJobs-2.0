@@ -7,6 +7,9 @@ import { Badge } from "@/components/ui/Badge";
 import { AdminCompaniesList } from "@/components/admin/AdminCompaniesList";
 import { AdminJobsList } from "@/components/admin/AdminJobsList";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const metadata = {
   title: "Painel Administrativo | TechLink",
   description: "Governança, moderação institucional e métricas gerais da plataforma.",

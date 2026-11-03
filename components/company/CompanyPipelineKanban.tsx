@@ -101,6 +101,7 @@ export function CompanyPipelineKanban({ applications, history }: CompanyPipeline
     return (
       <div
         key={app.id}
+        className="kanban-card"
         style={{
           background: "rgba(15, 29, 69, 0.8)",
           border: "1px solid var(--color-border-medium)",
