@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { HeroCinematicScene } from "./HeroCinematicScene";
+import { HeroSearch } from "./HeroSearch";
 
 export function HeroSection() {
   return (
@@ -39,6 +40,9 @@ export function HeroSection() {
             baseada em competências reais, transparência em cada etapa e conexão direta entre
             desenvolvedores e empresas.
           </p>
+
+          {/* Campo de Busca Rápida de Vagas no Hero */}
+          <HeroSearch />
 
           {/* Chamadas de Ação (CTAs) */}
           <div className="hero-ctas">

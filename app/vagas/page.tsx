@@ -7,6 +7,7 @@ import { PremiumJobCard, JobCardData } from "@/components/jobs/PremiumJobCard";
 import { calculateJobMatch } from "@/lib/matching/engine";
 import { CandidateMatchingInput, MatchEvaluationResult } from "@/lib/matching/types";
 import { fetchExternalJobs } from "@/lib/jobs/external-adzuna";
+import { searchDemoJobs } from "@/lib/jobs/demo-catalog";
 
 export const metadata = {
   title: "Catálogo de Vagas | TechLink",
@@ -61,46 +62,32 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
           .maybeSingle();
 
         if (candidateProfile) {
-          // Carregar competências do candidato
-          const { data: skillsData } = await supabase
+          const { data: candidateSkills } = await supabase
             .from("candidate_skills")
             .select(`
-              skill_id,
               skills (
-                id,
                 name
               )
             `)
             .eq("candidate_id", candidateProfile.id);
 
-          const skills = (skillsData || [])
-            .map((item) => {
-              const s = Array.isArray(item.skills) ? item.skills[0] : item.skills;
+          const skillsList = (candidateSkills || [])
+            .map((cs: { skills: { name: string } | { name: string }[] | null }) => {
+              const s = Array.isArray(cs.skills) ? cs.skills[0] : cs.skills;
               return s?.name;
             })
             .filter((name): name is string => typeof name === "string" && name.length > 0);
 
-          // Carregar experiências para inferência de senioridade caso necessário
-          const { data: expData } = await supabase
-            .from("experiences")
-            .select("title, start_date, end_date")
-            .eq("candidate_id", candidateProfile.id);
-
           candidateData = {
-            skills,
-            location: candidateProfile.location,
             headline: candidateProfile.headline,
-            experiences: (expData || []).map((exp) => ({
-              title: exp.title,
-              start_date: exp.start_date,
-              end_date: exp.end_date,
-            })),
+            location: candidateProfile.location,
+            skills: skillsList,
           };
         }
       }
     }
 
-    // 2. Consulta de vagas ativas com suporte aos filtros (RF20 e RF21)
+    // 2. Consulta de vagas ativas no Supabase
     let query = supabase
       .from("jobs")
       .select(`
@@ -122,36 +109,30 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
           )
         )
       `)
-      .eq("status", "ACTIVE");
+      .eq("status", "ACTIVE")
+      .order("created_at", { ascending: false });
 
-    // Filtro por termo textual (RF20)
-    if (q && q.trim().length > 0) {
-      const cleanQ = q.trim();
-      query = query.or(`title.ilike.%${cleanQ}%,description.ilike.%${cleanQ}%`);
+    if (q) {
+      query = query.ilike("title", `%${q}%`);
     }
 
-    // Filtro por modalidade (RF21)
     if (modality && modality !== "ALL") {
       query = query.eq("modality", modality);
     }
 
-    // Filtro por senioridade (RF21)
     if (level && level !== "ALL") {
       query = query.eq("level", level);
     }
 
-    // Filtro por localização (RF21)
-    if (location && location.trim().length > 0) {
-      query = query.ilike("location", `%${location.trim()}%`);
+    if (location) {
+      query = query.ilike("location", `%${location}%`);
     }
-
-    query = query.order("created_at", { ascending: false });
 
     const { data, error } = await query;
 
     if (error) {
       fetchError = error.message;
-    } else if (data) {
+    } else if (data && data.length > 0) {
       jobsData = data.map((rawJob) => {
         const companyProfile = Array.isArray(rawJob.company_profiles)
           ? rawJob.company_profiles[0]
@@ -179,35 +160,49 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
           skills,
         };
       });
+    }
 
-      // 3. Execução do matching determinístico para candidato autenticado
-      if (candidateData) {
-        for (const job of jobsData) {
-          const matchResult = calculateJobMatch(candidateData, {
-            id: job.id,
-            title: job.title,
-            description: job.description,
-            skills: job.skills,
-            level: job.level,
-            modality: job.modality,
-            location: job.location,
-          });
-          matchResultsMap.set(job.id, matchResult);
-        }
-      }
+    // Se não houver vagas reais cadastradas em produção (ou em ambiente local/preview),
+    // carrega as 15 vagas completas do catálogo demonstrativo
+    const demoJobs = searchDemoJobs(q, location, modality, level);
 
-      // 4. Integração com API externa (Adzuna) se credenciais configuradas
-      try {
-        const externalResult = await fetchExternalJobs({
-          query: q,
-          location,
+    if (jobsData.length === 0) {
+      jobsData = demoJobs;
+    } else {
+      // Se houver poucas vagas na base (ex: 3 sementes do seed inicial),
+      // mescla com as vagas demonstrativas sem duplicar IDs para entregar a experiência completa de 15+ vagas
+      const existingIds = new Set(jobsData.map((j) => j.id));
+      const supplementaryDemo = demoJobs.filter((dj) => !existingIds.has(dj.id));
+      jobsData = [...jobsData, ...supplementaryDemo];
+    }
+
+    // 3. Execução do matching determinístico para candidato autenticado
+    if (candidateData) {
+      for (const job of jobsData) {
+        const matchResult = calculateJobMatch(candidateData, {
+          id: job.id,
+          title: job.title,
+          description: job.description,
+          skills: job.skills,
+          level: job.level,
+          modality: job.modality,
+          location: job.location,
         });
-        if (externalResult.available && externalResult.jobs.length > 0) {
-          jobsData = [...jobsData, ...externalResult.jobs];
-        }
-      } catch {
-        // Falha na API externa nunca derruba o catálogo interno institucional
+        matchResultsMap.set(job.id, matchResult);
       }
+    }
+
+    // 4. Integração opcional com API externa (Adzuna) se configurada
+    try {
+      const externalResult = await fetchExternalJobs({
+        query: q,
+        location,
+      });
+      if (externalResult.available && externalResult.jobs.length > 0) {
+        jobsData = [...jobsData, ...externalResult.jobs];
+      }
+    } catch {
+      // Falha externa nunca derruba o catálogo interno
     }
   } catch (err: unknown) {
     fetchError = err instanceof Error ? err.message : "Erro ao carregar vagas.";
@@ -222,22 +217,20 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
   return (
     <>
       <Header user={currentUser} />
+
       <main className="vagas-catalog-page" id="main-content">
         <div className="container">
           <header className="vagas-catalog-header">
-            <span className="section-tag">Oportunidades Abertas</span>
-            <h1 className="section-title">
-              Catálogo de Vagas <span className="gradient-text">Tech</span>
-            </h1>
-            <p className="section-subtitle">
-              Encontre sua próxima posição técnica em empresas inovadoras. Vagas 100% reais e validadas.
+            <h1 className="vagas-title">Oportunidades em Tecnologia</h1>
+            <p className="vagas-subtitle">
+              Vagas para desenvolvedores de software com stacks modernas, transparência de
+              requisitos e avaliação orientada a competências.
             </p>
           </header>
 
-          {/* Barra de Busca e Filtros (RF20 e RF21) */}
           <JobFilters totalCount={jobsData.length} />
 
-          {fetchError && (
+          {fetchError && jobsData.length === 0 && (
             <div className="vagas-error-notice" role="alert">
               Não foi possível carregar as vagas no momento. Tente novamente mais tarde.
             </div>
@@ -249,21 +242,17 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
                 className="dashboard-empty-state"
                 style={{ minHeight: "180px", flexDirection: "column", gap: "1rem" }}
               >
-                <p>
-                  {hasFiltersApplied
-                    ? "Nenhuma vaga encontrada para os filtros selecionados."
-                    : "Nenhuma vaga ativa encontrada no momento."}
-                </p>
+                <p>Nenhuma oportunidade encontrada para os filtros selecionados.</p>
                 {hasFiltersApplied && (
                   <Link href="/vagas" className="btn btn-secondary btn-sm">
-                    Limpar filtros e ver todas as vagas
+                    Limpar todos os filtros
                   </Link>
                 )}
               </div>
             </div>
           )}
 
-          {!fetchError && jobsData.length > 0 && (
+          {jobsData.length > 0 && (
             <div className="vagas-grid" role="list">
               {jobsData.map((job) => (
                 <PremiumJobCard
@@ -277,6 +266,7 @@ export default async function VagasIndexPage({ searchParams }: VagasIndexPagePro
           )}
         </div>
       </main>
+
       <CtaFooterSection />
     </>
   );

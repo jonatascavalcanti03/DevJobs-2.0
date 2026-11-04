@@ -1,5 +1,7 @@
 import { Header } from "@/components/landing/Header";
 import { HeroSection } from "@/components/landing/HeroSection";
+import { FeaturedCompaniesSection } from "@/components/landing/FeaturedCompaniesSection";
+import { TechCategoriesSection } from "@/components/landing/TechCategoriesSection";
 import { BenefitsSection } from "@/components/landing/BenefitsSection";
 import { HowItWorksSection } from "@/components/landing/HowItWorksSection";
 import { FeaturedJobsSection } from "@/components/landing/FeaturedJobsSection";
@@ -39,6 +41,8 @@ export default async function Home() {
       <Header user={currentUser} />
       <main id="main-content">
         <HeroSection />
+        <FeaturedCompaniesSection />
+        <TechCategoriesSection />
         <BenefitsSection />
         <HowItWorksSection />
         <FeaturedJobsSection />

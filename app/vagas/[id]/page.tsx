@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { JobMatchPanel } from "@/components/jobs/JobMatchPanel";
 import { calculateJobMatch } from "@/lib/matching/engine";
 import { CandidateMatchingInput, MatchEvaluationResult } from "@/lib/matching/types";
+import { getDemoJobById } from "@/lib/jobs/demo-catalog";
 
 interface JobDetailsPageProps {
   params: Promise<{ id: string }>;
@@ -25,7 +26,7 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
   const supabase = await createClient();
 
   // Consulta da vaga, dados de empresa e competências associadas
-  const { data: job, error: jobError } = await supabase
+  const { data: rawJob } = await supabase
     .from("jobs")
     .select(`
       id,
@@ -53,7 +54,10 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
     .eq("id", id)
     .maybeSingle();
 
-  if (jobError || !job) {
+  // Se não encontrar no banco de dados, busca no catálogo demonstrativo
+  const demoJob = !rawJob ? getDemoJobById(id) : null;
+
+  if (!rawJob && !demoJob) {
     notFound();
   }
 
@@ -66,13 +70,33 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
   let hasApplied = false;
   let matchResult: MatchEvaluationResult | null = null;
 
-  // Tratamento seguro de competências da vaga
-  const jobSkills: string[] = (job.job_skills || [])
-    .map((js: { skills: { id: string; name: string } | { id: string; name: string }[] | null }) => {
-      const s = Array.isArray(js.skills) ? js.skills[0] : js.skills;
-      return s?.name;
-    })
-    .filter((name): name is string => typeof name === "string" && name.length > 0);
+  // Unifica estrutura de job
+  const job = rawJob || {
+    id: demoJob!.id,
+    title: demoJob!.title,
+    description: demoJob!.description,
+    status: demoJob!.status,
+    location: demoJob!.location,
+    modality: demoJob!.modality,
+    level: demoJob!.level,
+    created_at: demoJob!.created_at,
+    company_id: "demo-company-id",
+    company_profiles: {
+      id: "demo-company-id",
+      company_name: demoJob!.companyName,
+      trading_name: demoJob!.companyTradingName,
+      website: "https://example.com",
+    },
+  };
+
+  const jobSkills: string[] = rawJob
+    ? (rawJob.job_skills || [])
+        .map((js: { skills: { id: string; name: string } | { id: string; name: string }[] | null }) => {
+          const s = Array.isArray(js.skills) ? js.skills[0] : js.skills;
+          return s?.name;
+        })
+        .filter((name): name is string => typeof name === "string" && name.length > 0)
+    : demoJob!.skills;
 
   if (user) {
     const { data: userData } = await supabase
@@ -84,7 +108,6 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
     userRole = (userData?.role as "CANDIDATE" | "COMPANY" | "ADMIN") || null;
 
     if (userRole === "CANDIDATE") {
-      // Carregar perfil do candidato
       const { data: candidateProfile } = await supabase
         .from("candidate_profiles")
         .select("id, headline, location")
@@ -92,7 +115,6 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
         .maybeSingle();
 
       if (candidateProfile) {
-        // Verificar se o candidato já se candidatou
         const { data: existingApp } = await supabase
           .from("applications")
           .select("id")
@@ -104,44 +126,29 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
           hasApplied = true;
         }
 
-        // Carregar competências do candidato para a engine determinística
         const { data: skillsData } = await supabase
           .from("candidate_skills")
           .select(`
-            skill_id,
             skills (
-              id,
               name
             )
           `)
           .eq("candidate_id", candidateProfile.id);
 
-        const candidateSkills = (skillsData || [])
-          .map((item) => {
-            const s = Array.isArray(item.skills) ? item.skills[0] : item.skills;
+        const candidateSkillsList = (skillsData || [])
+          .map((cs: { skills: { name: string } | { name: string }[] | null }) => {
+            const s = Array.isArray(cs.skills) ? cs.skills[0] : cs.skills;
             return s?.name;
           })
           .filter((name): name is string => typeof name === "string" && name.length > 0);
 
-        // Carregar experiências para cálculo e inferência de senioridade
-        const { data: expData } = await supabase
-          .from("experiences")
-          .select("title, start_date, end_date")
-          .eq("candidate_id", candidateProfile.id);
-
-        const candidateMatchingData: CandidateMatchingInput = {
-          skills: candidateSkills,
-          location: candidateProfile.location,
+        const candidateInput: CandidateMatchingInput = {
           headline: candidateProfile.headline,
-          experiences: (expData || []).map((exp) => ({
-            title: exp.title,
-            start_date: exp.start_date,
-            end_date: exp.end_date,
-          })),
+          location: candidateProfile.location,
+          skills: candidateSkillsList,
         };
 
-        // Executar engine determinística oficial
-        matchResult = calculateJobMatch(candidateMatchingData, {
+        matchResult = calculateJobMatch(candidateInput, {
           id: job.id,
           title: job.title,
           description: job.description,
@@ -154,16 +161,18 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
     }
   }
 
-  // Type safe handling for company_profiles relation
-  const companyProfile = Array.isArray(job.company_profiles)
-    ? job.company_profiles[0]
-    : job.company_profiles;
-  const companyName =
-    companyProfile?.trading_name || companyProfile?.company_name || "Empresa Confidencial";
+  const cp = Array.isArray(job.company_profiles) ? job.company_profiles[0] : job.company_profiles;
+  const companyName = cp?.trading_name || cp?.company_name || "Empresa Confidencial";
+  const formattedDate = new Date(job.created_at).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
 
   return (
     <>
-      <Header user={user ? { email: user.email, role: userRole } : null} />
+      <Header user={user ? { email: user.email ?? null, role: userRole } : null} />
+
       <main className="job-details-page" id="main-content">
         <div className="container">
           <div className="job-details-breadcrumb">
@@ -209,12 +218,10 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
                 </div>
               </header>
 
-              {/* Painel de Matching Explicável (Apenas para Candidatos Autenticados) */}
               {userRole === "CANDIDATE" && matchResult && (
                 <JobMatchPanel matchResult={matchResult} />
               )}
 
-              {/* Descrição Completa da Vaga */}
               <section className="job-details-body" aria-labelledby="job-description-heading">
                 <h2 id="job-description-heading" className="job-details-section-title">
                   Descrição da Vaga
@@ -230,7 +237,32 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
                 </div>
               </section>
 
-              {/* Competências Técnicas Exigidas */}
+              {demoJob && demoJob.responsibilities && (
+                <section className="job-details-body" aria-labelledby="job-resp-heading">
+                  <h2 id="job-resp-heading" className="job-details-section-title">
+                    Principais Responsabilidades
+                  </h2>
+                  <ul className="job-details-bullet-list">
+                    {demoJob.responsibilities.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {demoJob && demoJob.requirements && (
+                <section className="job-details-body" aria-labelledby="job-req-heading">
+                  <h2 id="job-req-heading" className="job-details-section-title">
+                    Requisitos e Diferenciais
+                  </h2>
+                  <ul className="job-details-bullet-list">
+                    {demoJob.requirements.map((req, i) => (
+                      <li key={i}>{req}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
               {jobSkills.length > 0 && (
                 <section className="job-details-skills-section" aria-labelledby="job-skills-heading">
                   <h2 id="job-skills-heading" className="job-details-section-title">
@@ -245,80 +277,47 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
                   </div>
                 </section>
               )}
-
-              {/* Informações da Empresa */}
-              {companyProfile && (
-                <section className="job-details-company-section" aria-labelledby="job-company-heading">
-                  <h2 id="job-company-heading" className="job-details-section-title">
-                    Sobre a Empresa Contratante
-                  </h2>
-                  <div className="job-details-company-info-card">
-                    <div className="company-info-row">
-                      <span className="company-info-label">Nome:</span>
-                      <span className="company-info-val">
-                        {companyProfile.trading_name || companyProfile.company_name}
-                      </span>
-                    </div>
-                    {companyProfile.website && (
-                      <div className="company-info-row">
-                        <span className="company-info-label">Website:</span>
-                        <a
-                          href={
-                            companyProfile.website.startsWith("http")
-                              ? companyProfile.website
-                              : `https://${companyProfile.website}`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="company-info-val text-electric-blue"
-                        >
-                          {companyProfile.website}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
             </article>
 
-            {/* Sidebar com Ações de Candidatura */}
-            <aside className="job-details-sidebar" aria-label="Ações de candidatura">
-              <div className="job-action-card">
-                <h2 className="job-action-title">Candidatura</h2>
-                <p className="job-action-desc">
-                  Envie sua candidatura diretamente para a equipe de recrutamento desta vaga.
-                </p>
+            <aside className="job-details-sidebar" aria-label="Ações e Resumo da Oportunidade">
+              <div className="job-sidebar-card">
+                <h3 className="job-sidebar-title">Candidatura</h3>
+                <div className="job-sidebar-actions">
+                  <ApplyButton
+                    jobId={job.id}
+                    userRole={userRole}
+                    hasApplied={hasApplied}
+                    isJobActive={job.status === "ACTIVE"}
+                  />
+                </div>
 
-                <ApplyButton
-                  jobId={job.id}
-                  isJobActive={job.status === "ACTIVE"}
-                  userRole={userRole}
-                  hasApplied={hasApplied}
-                />
+                <hr className="job-sidebar-divider" />
 
-                <div className="job-action-meta">
-                  <div className="job-meta-row">
-                    <span className="job-meta-label">Publicada em:</span>
-                    <span className="job-meta-value">
-                      {new Date(job.created_at).toLocaleDateString("pt-BR")}
-                    </span>
+                <div className="job-summary-list">
+                  <div className="job-summary-item">
+                    <span className="job-summary-label">Publicação</span>
+                    <span className="job-summary-value">{formattedDate}</span>
                   </div>
-                  {job.modality && (
-                    <div className="job-meta-row">
-                      <span className="job-meta-label">Modalidade:</span>
-                      <span className="job-meta-value">{job.modality}</span>
+                  <div className="job-summary-item">
+                    <span className="job-summary-label">Modalidade</span>
+                    <span className="job-summary-value">{job.modality || "Não especificada"}</span>
+                  </div>
+                  <div className="job-summary-item">
+                    <span className="job-summary-label">Nível de Experiência</span>
+                    <span className="job-summary-value">{job.level || "Não especificado"}</span>
+                  </div>
+                  {demoJob?.salaryRange && (
+                    <div className="job-summary-item">
+                      <span className="job-summary-label">Faixa Salarial</span>
+                      <span className="job-summary-value" style={{ color: "var(--color-primary-base, #10b981)", fontWeight: 600 }}>
+                        {demoJob.salaryRange}
+                      </span>
                     </div>
                   )}
-                  {job.level && (
-                    <div className="job-meta-row">
-                      <span className="job-meta-label">Nível:</span>
-                      <span className="job-meta-value">{job.level}</span>
-                    </div>
-                  )}
-                  {job.location && (
-                    <div className="job-meta-row">
-                      <span className="job-meta-label">Localização:</span>
-                      <span className="job-meta-value">{job.location}</span>
+                  {demoJob?.contractType && (
+                    <div className="job-summary-item">
+                      <span className="job-summary-label">Tipo de Contrato</span>
+                      <span className="job-summary-value">{demoJob.contractType}</span>
                     </div>
                   )}
                 </div>
@@ -327,6 +326,7 @@ export default async function JobDetailsPage({ params }: JobDetailsPageProps) {
           </div>
         </div>
       </main>
+
       <CtaFooterSection />
     </>
   );
