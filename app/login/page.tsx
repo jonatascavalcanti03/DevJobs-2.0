@@ -22,10 +22,17 @@ function LoginForm() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const result = await login(formData);
 
-    if (result?.error) {
-      setError(result.error);
+    try {
+      const result = await login(formData);
+
+      if (result?.error) {
+        setError(result.error);
+      }
+    } catch (caughtError) {
+      console.error("[v0] Falha inesperada ao entrar:", caughtError);
+      setError("Não foi possível concluir o login. Verifique sua conexão e tente novamente.");
+    } finally {
       setIsPending(false);
     }
   };
