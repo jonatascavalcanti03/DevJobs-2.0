@@ -11,6 +11,7 @@ function LoginForm() {
   const registered = searchParams.get("registered") === "1";
   const reset = searchParams.get("reset") === "1";
   const accountError = searchParams.get("error") === "account";
+  const companyRoleError = searchParams.get("error") === "company-role";
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -49,6 +50,12 @@ function LoginForm() {
         {accountError && !error && (
           <div className="auth-error" role="alert">
             Perfil de usuário não localizado. Contate o suporte.
+          </div>
+        )}
+
+        {companyRoleError && !error && (
+          <div className="auth-error" role="alert">
+            Este e-mail está cadastrado como candidato. Para acessar o painel empresarial, use uma conta de empresa ou cadastre este e-mail como empresa.
           </div>
         )}
 

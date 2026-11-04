@@ -39,7 +39,19 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath("/", "layout");
-  redirect(getInternalRedirect(formData.get("redirectTo")));
+
+  const requestedRedirect = getInternalRedirect(formData.get("redirectTo"));
+  const { data: profile } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", (await supabase.auth.getUser()).data.user?.id ?? "")
+    .maybeSingle();
+
+  if (requestedRedirect.startsWith("/dashboard/empresa") && profile?.role !== "COMPANY") {
+    redirect("/login?error=company-role");
+  }
+
+  redirect(requestedRedirect);
 }
 
 export async function register(formData: FormData) {
